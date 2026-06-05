@@ -97,7 +97,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text2);gap:12px}
 .empty-state .emoji{font-size:64px}
 .empty-state p{font-size:15px}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:600;backdrop-filter:blur(4px)}
 .modal-overlay.show{display:flex}
 .modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:500px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow)}
 .modal h3{margin-bottom:16px}
@@ -751,13 +751,11 @@ function openMapEditor(){
   document.getElementById('mapEditorOverlay').classList.add('show');renderMapEditor()
 }
 function saveMapEditor(){
-  createBackup('修改户型图');saveData();
+  // 各个添加/编辑操作已经单独 saveData + createBackup 了，这里只需刷新 UI
   mapSnapshot=null;
   document.getElementById('mapEditorOverlay').classList.remove('show');
-  renderFloorPlan();renderRoomList();
-  // Save to file
-  const exportObj={data,itemProps};
-  fetch('home-inventory.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(exportObj,null,2)}).catch(()=>{});
+  renderFloorPlan();renderRoomList();renderDetail();
+  saveData();  // 最后确保一次完整保存
   toast('户型图已保存');
 }
 function cancelMapEditor(){if(mapSnapshot){data=mapSnapshot;mapSnapshot=null}document.getElementById('mapEditorOverlay').classList.remove('show');renderFloorPlan();renderRoomList()}
@@ -1045,9 +1043,21 @@ function saveRoom(){
   const name=document.getElementById('editRoomName').value.trim();
   const icon=document.getElementById('editRoomIcon').value.trim()||'📦';
   if(!name)return alert('请输入房间名称');
-  if(id){const r=data.rooms.find(r=>r.id===id);if(r){createBackup(`修改房间「${r.name}」→「${name}」`);saveData();r.name=name;r.icon=icon}}
-  else{data.rooms.push({id:'room_'+uid(),name,icon,polygon:'150,10 250,10 250,80 150,80',cabinets:[]});logOp(`添加房间「${name}」`)}
-  closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast(id?'已更新':'已添加');
+  if(id){
+    const r=data.rooms.find(r=>r.id===id);
+    if(r){createBackup(`修改房间「${r.name}」→「${name}」`);saveData();r.name=name;r.icon=icon}
+  } else {
+    const newRoom={id:'room_'+uid(),name,icon,polygon:'150,10 250,10 250,80 150,80',cabinets:[]};
+    data.rooms.push(newRoom);
+    createBackup(`添加房间「${name}」`);saveData();
+  }
+  closeRoomModal();
+  // 刷新地图编辑器（如果在地图编辑模式）
+  if(document.getElementById('mapEditorOverlay').classList.contains('show')){
+    renderMapEditor();
+  }
+  renderFloorPlan();renderRoomList();renderDetail();
+  toast(id?'已更新':'已添加');
 }
 function deleteRoom(){
   const id=document.getElementById('editRoomId').value;
@@ -1057,7 +1067,12 @@ function deleteRoom(){
   if(room)createBackup(`删除房间「${room.name}」`);saveData();
   data.rooms=data.rooms.filter(r=>r.id!==id);
   if(currentRoom===id){currentRoom=null;currentCabinet=null;currentZone=null}
-  closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast('已删除');
+  closeRoomModal();
+  if(document.getElementById('mapEditorOverlay').classList.contains('show')){
+    renderMapEditor();
+  }
+  renderFloorPlan();renderRoomList();renderDetail();
+  toast('已删除');
 }
 
 // ===== CABINET MODAL =====
@@ -1118,10 +1133,18 @@ function saveStruct(){
   const id=document.getElementById('structId').value;
   const name=document.getElementById('structName').value.trim();
   if(!name)return alert('请输入名称');
+
   if(type==='cabinet'){
     const zones=document.getElementById('structZones').value.split(',').map(s=>s.trim()).filter(Boolean);
-    const r=data.rooms.find(r=>r.id===id);if(r){
-      const cab={id:'cab_'+uid(),name,zones:zones.map(z=>({id:'zone_'+uid(),name:z,items:[]}))};
+    const r=data.rooms.find(r=>r.id===id);
+    if(r){
+      // 给柜子一个默认polygon（放在房间中央）
+      const roomPts=parsePolygon(r.polygon);
+      const bb=polygonBBox(roomPts);
+      const cw=60,ch=40;
+      const cx=(bb.minX+bb.maxX)/2, cy=(bb.minY+bb.maxY)/2;
+      const defaultPoly=`${cx-cw/2},${cy-ch/2} ${cx+cw/2},${cy-ch/2} ${cx+cw/2},${cy+ch/2} ${cx-cw/2},${cy+ch/2}`;
+      const cab={id:'cab_'+uid(),name,zones:zones.map(z=>({id:'zone_'+uid(),name:z,items:[]})),polygon:defaultPoly};
       r.cabinets.push(cab);currentCabinet=cab.id;
       createBackup(`在「${r.name}」添加柜子「${name}」`);saveData();
     }
@@ -1144,7 +1167,13 @@ function saveStruct(){
       createBackup(`修改位置「${oldName}」→「${name}」`);saveData();break;
     }}}
   }
-  closeStructModal();renderDetail();toast('已保存');
+  closeStructModal();
+  // 如果在地图编辑模式，刷新地图编辑器
+  if(document.getElementById('mapEditorOverlay').classList.contains('show')){
+    renderMapEditor();
+  }
+  renderFloorPlan();renderRoomList();renderDetail();
+  toast('已保存');
 }
 
 function deleteStruct(){
