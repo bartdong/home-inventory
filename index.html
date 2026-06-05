@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏠 家庭收纳可视化</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--text:#e2e8f0;--text2:#94a3b8;--accent:#38bdf8;--accent2:#818cf8;--green:#4ade80;--orange:#fb923c;--red:#f87171;--yellow:#fbbf24;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3)}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--surface2);flex-wrap:wrap}
+.search-box{flex:1;min-width:120px;position:relative}
+.search-box input{width:100%;padding:10px 16px 10px 40px;border:2px solid var(--surface2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:15px;outline:none;transition:border-color .2s}
+.search-box input:focus{border-color:var(--accent)}
+.search-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:5px 12px;border:none;border-radius:6px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:12px;font-weight:600;transition:all .2s}
+.search-btn:hover{filter:brightness(1.1)}
+.search-box .icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;opacity:.5}
+.topbar-btn{padding:7px 14px;border:1px solid var(--surface2);border-radius:8px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:13px;transition:all .2s;white-space:nowrap}
+.topbar-btn:hover{border-color:var(--accent);color:var(--accent)}
+.dropdown-menu{display:none;position:absolute;top:100%;right:0;margin-top:4px;background:var(--surface);border:1px solid var(--surface2);border-radius:8px;padding:4px;z-index:50;min-width:120px;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.dropdown-menu.show{display:block}
+.dropdown-item{padding:8px 12px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text2);transition:all .2s;display:flex;align-items:center;gap:8px}
+.dropdown-item:hover{background:var(--surface2);color:var(--text)}
+.icon-btn{width:28px;height:28px;border:1px solid var(--surface2);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.main{display:flex;flex:1;overflow:hidden}
+.floor-panel{width:360px;min-width:360px;padding:16px;overflow-y:auto;border-right:1px solid var(--surface2);display:flex;flex-direction:column;gap:12px}
+.floor-plan-container{background:var(--surface);border-radius:var(--radius);padding:16px;position:relative}
+.floor-plan-container h3{font-size:14px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.floor-plan-container h3 .btn-icon{margin-left:auto;background:var(--accent);color:var(--bg);border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700}
+.floor-plan{width:100%;aspect-ratio:4/3;position:relative}
+.floor-plan svg{width:100%;height:100%}
+.room-shape{fill:var(--surface2);stroke:var(--accent);stroke-width:1.5;cursor:pointer;transition:fill .2s,stroke .2s;opacity:.6}
+.room-shape:hover{opacity:.9}
+.room-shape.active{fill:var(--accent);opacity:.35;stroke-width:2.5}
+.room-shape.highlight{fill:var(--yellow);opacity:.4;stroke:var(--yellow);stroke-width:2.5;animation:pulse 1.2s ease-in-out infinite}
+.room-shape.dimmed{opacity:.2}
+.room-shape.dragging{stroke:var(--green);stroke-width:3;opacity:.7}
+.room-label{fill:var(--text);font-size:11px;font-weight:600;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.room-label.highlight{fill:var(--yellow);font-weight:800}
+.handle{fill:var(--accent);stroke:var(--bg);stroke-width:1.5;cursor:pointer;opacity:0;transition:opacity .2s}
+.room-group:hover .handle,.room-group.active .handle,.handle:hover{opacity:.8}
+.cab-shape{fill:var(--accent2);stroke:var(--accent2);stroke-width:1;cursor:pointer;transition:all .2s;opacity:.4}
+.cab-shape:hover{opacity:.7}
+.cab-shape.active{opacity:.6;stroke-width:2}
+.cab-shape.dragging{stroke:var(--green);stroke-width:3;opacity:.7}
+.cab-label{fill:white;font-size:9px;font-weight:600;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.cab-group .handle{fill:var(--accent2)}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.55}}
+.room-list{display:flex;flex-direction:column;gap:4px}
+.room-item{padding:10px 14px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;font-size:14px;position:relative}
+.room-item:hover{background:var(--surface)}
+.room-item.active{background:var(--surface);color:var(--accent);font-weight:600}
+.room-item.highlight{background:rgba(251,191,36,.15);color:var(--yellow);font-weight:600}
+.room-item .count{margin-left:auto;background:var(--surface2);padding:2px 8px;border-radius:10px;font-size:12px;color:var(--text2)}
+.room-item.active .count{background:var(--accent);color:var(--bg)}
+.room-item .room-actions{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:none;gap:4px}
+.room-item:hover .room-actions{display:flex}
+.room-item .room-actions button{background:var(--surface2);border:none;color:var(--text2);cursor:pointer;border-radius:4px;padding:2px 6px;font-size:12px;transition:all .2s}
+.room-item .room-actions button:hover{background:var(--accent);color:var(--bg)}
+.detail-panel{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column}
+.breadcrumb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);margin-bottom:16px;flex-wrap:wrap}
+.breadcrumb span{cursor:pointer;transition:color .2s}
+.breadcrumb span:hover{color:var(--accent)}
+.breadcrumb .sep{cursor:default;opacity:.4}
+.breadcrumb .current{color:var(--text);font-weight:600}
+.cabinet-view{background:var(--surface);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.cabinet-view h3{font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.cabinet-grid{display:grid;gap:8px}
+.cabinet-zone{background:var(--bg);border:2px solid var(--surface2);border-radius:10px;padding:14px;cursor:pointer;transition:all .25s;position:relative;min-height:80px}
+.cabinet-zone:hover{border-color:var(--accent);transform:translateY(-2px)}
+.cabinet-zone.active{border-color:var(--accent);background:rgba(56,189,248,.08);box-shadow:0 0 20px rgba(56,189,248,.15)}
+.cabinet-zone .zone-name{font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.cabinet-zone .zone-items{display:flex;flex-wrap:wrap;gap:6px}
+.cabinet-zone .zone-item{background:var(--surface2);padding:4px 10px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px;user-select:none}
+.cabinet-zone .zone-item:hover{background:var(--accent);color:var(--bg)}
+.cabinet-zone .zone-item.highlight{background:var(--yellow);color:var(--bg);font-weight:600;animation:glow 1.5s ease-in-out infinite}
+.cabinet-zone .zone-item.selected{background:var(--accent2);color:white;box-shadow:0 0 8px rgba(129,140,248,.5)}
+.zone-item .qty-badge{font-size:10px;background:var(--accent2);color:white;padding:1px 5px;border-radius:4px;opacity:.8}
+@keyframes glow{0%,100%{box-shadow:0 0 4px rgba(251,191,36,.3)}50%{box-shadow:0 0 12px rgba(251,191,36,.6)}}
+.item-detail{background:var(--surface);border-radius:var(--radius);padding:20px;animation:slideUp .3s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.item-detail h3{font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.item-detail .close-btn{margin-left:auto;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;padding:4px 8px;border-radius:6px}
+.item-detail .close-btn:hover{background:var(--bg);color:var(--text)}
+.item-props{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.prop-card{background:var(--bg);border-radius:10px;padding:14px}
+.prop-card .prop-label{font-size:11px;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.prop-card .prop-value{font-size:15px;font-weight:600}
+.prop-card.full{grid-column:1/-1}
+.item-photo{width:100%;max-height:200px;object-fit:cover;border-radius:8px;margin-bottom:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:48px}
+.item-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.tag{padding:4px 10px;border-radius:6px;font-size:12px;background:var(--accent2);color:white;opacity:.8}
+.quantity-bar{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-top:6px}
+.quantity-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text2);gap:12px}
+.empty-state .emoji{font-size:64px}
+.empty-state p{font-size:15px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:500px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow)}
+.modal h3{margin-bottom:16px}
+.modal label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;margin-top:12px}
+.modal input,.modal select,.modal textarea{width:100%;padding:8px 12px;border:2px solid var(--surface2);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;outline:none}
+.modal select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.modal input:focus,.modal select:focus{border-color:var(--accent)}
+.modal .btn-row{display:flex;gap:8px;margin-top:20px;justify-content:flex-end;flex-wrap:wrap}
+.modal .btn{padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all .2s}
+.modal .btn-primary{background:var(--accent);color:var(--bg)}
+.modal .btn-primary:hover{filter:brightness(1.1)}
+.modal .btn-cancel{background:var(--surface2);color:var(--text)}
+.modal .btn-danger{background:var(--red);color:white}
+.modal .btn-sm{padding:5px 12px;font-size:12px}
+.modal .btn-outline{background:transparent;border:1px solid var(--surface2);color:var(--text2)}
+.modal .btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.toolbar{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.toolbar-btn,.btn-action{padding:7px 14px;border:1px solid var(--surface2);border-radius:8px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:13px;display:inline-flex;align-items:center;gap:5px;transition:all .2s}
+.toolbar-btn:hover,.btn-action:hover{border-color:var(--accent);color:var(--accent)}
+.move-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(6px)}
+.move-overlay.show{display:flex}
+.move-panel{background:var(--surface);border-radius:var(--radius);padding:24px;width:500px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow)}
+.move-panel h3{margin-bottom:16px}
+.move-option{padding:10px 14px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .2s;font-size:14px;margin-bottom:4px}
+.move-option:hover{background:var(--surface)}
+.move-option.selected{background:rgba(56,189,248,.15);color:var(--accent);font-weight:600}
+.move-option .dest{margin-left:auto;font-size:12px;color:var(--text2)}
+.batch-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:2px solid var(--accent);padding:12px 20px;display:none;align-items:center;gap:12px;z-index:50;box-shadow:0 -4px 20px rgba(0,0,0,.3)}
+.batch-bar.show{display:flex}
+.batch-bar .count{font-weight:600;color:var(--accent)}
+.batch-bar .btn{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-ok{padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-ok:hover{filter:brightness(1.1)}
+.btn-ok:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.btn-cancel{padding:7px 14px;border:1px solid var(--surface2);border-radius:8px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:13px;transition:all .2s}
+.btn-cancel:hover{border-color:var(--text2);color:var(--text)}
+.btn-del{padding:7px 14px;border:1px solid var(--red);border-radius:8px;background:var(--red);color:white;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-del:hover{filter:brightness(1.1)}
+.btn-move{padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-move:hover{filter:brightness(1.1)}
+.btn-move:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;z-index:300;animation:toastIn .3s ease,toastOut .3s ease 1.7s forwards}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes toastOut{to{opacity:0;transform:translateX(-50%) translateY(20px)}}
+
+/* Map Editor Overlay */
+.map-editor-overlay{position:fixed;inset:0;background:var(--bg);z-index:500;display:none;flex-direction:column}
+.map-editor-overlay.show{display:flex}
+.map-editor-topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--surface2)}
+.map-editor-topbar h3{font-size:16px;flex:1}
+.map-editor-topbar .btn{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.map-editor-btn{padding:7px 14px;border:1px solid var(--surface2);border-radius:8px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:13px;transition:all .2s}
+.map-editor-btn:hover{border-color:var(--accent);color:var(--accent)}
+.map-editor-btn-done{border-color:var(--green);background:var(--green);color:var(--bg)}
+.map-editor-btn-done:hover{filter:brightness(1.1)}
+.map-editor-body{flex:1;display:flex;overflow:hidden}
+.map-editor-svg{flex:1;padding:20px;display:flex;align-items:center;justify-content:center}
+.map-editor-svg svg{max-width:100%;max-height:100%;border:1px solid var(--surface2);border-radius:8px}
+.map-editor-sidebar{width:300px;border-left:1px solid var(--surface2);overflow-y:auto;padding:16px}
+.map-editor-sidebar .room-list-item{padding:8px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;transition:all .2s}
+.map-editor-sidebar .room-list-item:hover{background:var(--surface)}
+.map-editor-sidebar .room-list-item.active{background:var(--surface);color:var(--accent)}
+.map-editor-sidebar .room-list-item .del{margin-left:auto;background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
+.map-editor-sidebar .room-list-item .del:hover{color:var(--red);background:rgba(248,113,113,.1)}
+
+/* Mobile */
+@media(max-width:768px){
+  .main{flex-direction:column}
+  .floor-panel{width:100%;min-width:0;border-right:none;padding:10px;flex:1;overflow-y:auto}
+  .floor-plan-container{padding:10px}
+  .detail-panel{display:none}
+  .detail-panel.mobile-show{display:flex;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:60;background:var(--bg);padding:12px;overflow-y:auto}
+  .mobile-back{display:none}
+  .mobile-back.show{display:inline-flex}
+  .item-props{grid-template-columns:1fr}
+  .topbar-btn,.toolbar-btn,.btn-action,.btn-ok,.btn-cancel,.btn-del,.btn-move,.map-editor-btn{padding:6px 10px;font-size:12px}
+  .topbar{padding:8px 12px;gap:8px}
+  .modal{width:95vw;padding:16px}
+  .toolbar{gap:4px}
+  .cabinet-zone{padding:10px}
+  .batch-bar{padding:10px 12px}
+  .desktop-only{display:none!important}
+}
+@media(min-width:769px){
+  .mobile-only{display:none!important}
+}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text2)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="topbar-btn mobile-back" id="mobileBack" onclick="mobileGoBack()">← 返回</button>
+    <div class="search-box"><span class="icon">🔍</span><input type="text" id="searchInput" placeholder="搜索物品..."/><button class="search-btn" id="searchBtn" onclick="doSearch()" style="display:none">搜索</button></div>
+    <button class="topbar-btn desktop-only" onclick="openMapEditor()">✏️ 编辑地图</button>
+    <div class="dropdown" style="position:relative">
+      <button class="topbar-btn" onclick="toggleDropdown(event)" id="sysBtn">⚙️</button>
+      <div class="dropdown-menu" id="sysDropdown">
+        <div class="dropdown-item" onclick="exportData()">📤 导出</div>
+        <div class="dropdown-item" onclick="importData()">📥 导入</div>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="floor-panel">
+      <div class="floor-plan-container">
+        <h3>🏠 户型图</h3>
+        <div class="floor-plan">
+          <svg id="floorPlanSvg" viewBox="0 0 400 300"></svg>
+        </div>
+      </div>
+      <div class="room-list" id="roomList"></div>
+    </div>
+    <div class="detail-panel" id="detailPanel">
+      <div class="empty-state"><div class="emoji">📦</div><p>选择一个房间开始浏览</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Bar -->
+<div class="batch-bar" id="batchBar">
+  <span>已选 <span class="count" id="batchCount">0</span> 件物品</span>
+  <button class="btn-move" onclick="openBatchMove()">📦 批量移动</button>
+  <button class="btn-cancel" onclick="exitBatch()">取消</button>
+</div>
+
+<!-- Map Editor Overlay -->
+<div class="map-editor-overlay" id="mapEditorOverlay">
+  <div class="map-editor-topbar">
+    <h3>✏️ 编辑户型图</h3>
+    <button class="map-editor-btn" onclick="openAddRoom()">+ 添加房间</button>
+    <button class="map-editor-btn" onclick="cancelMapEditor()">✕ 取消</button>
+    <button class="map-editor-btn map-editor-btn-done" onclick="saveMapEditor()">✓ 完成</button>
+  </div>
+  <div class="map-editor-body">
+    <div class="map-editor-svg">
+      <svg id="mapEditorSvg" viewBox="0 0 400 300"></svg>
+    </div>
+    <div class="map-editor-sidebar" id="mapEditorSidebar"></div>
+  </div>
+</div>
+
+<!-- Item Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3 id="modalTitle">编辑物品</h3>
+    <input type="hidden" id="editItemId"/>
+    <label>物品名称</label>
+    <input type="text" id="editName" placeholder="物品名称"/>
+    <label>数量</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="number" id="editQtyNum" min="0" step="1" value="1" style="width:80px"/>
+      <span style="color:var(--text2)">/</span>
+      <input type="number" id="editQtyTotal" min="1" step="1" value="1" style="width:80px"/>
+      <span style="color:var(--text2);font-size:12px">(已用/总量)</span>
+    </div>
+    <label>存放位置</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <select id="editRoom"><option value="">选择房间</option></select>
+      <select id="editCabinet"><option value="">选择柜子</option></select>
+      <select id="editZone"><option value="">选择位置</option></select>
+    </div>
+    <label>物品位置（精确）</label>
+    <input type="text" id="editPosition" placeholder="例：左、上层左"/>
+    <label>存放日期</label>
+    <input type="date" id="editDate"/>
+    <label>保质期/过期时间</label>
+    <input type="date" id="editExpiry"/>
+    <label>标签（逗号分隔）</label>
+    <input type="text" id="editTags" placeholder="常用, 厨房用品"/>
+    <label>备注</label>
+    <textarea id="editNote" rows="2" placeholder="备注信息..."></textarea>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn-del" id="deleteBtn" onclick="deleteItem()" style="display:none">删除</button>
+      <button class="btn-move" onclick="saveItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Room Modal -->
+<div class="modal-overlay" id="roomModal">
+  <div class="modal">
+    <h3 id="roomModalTitle">添加房间</h3>
+    <input type="hidden" id="editRoomId"/>
+    <label>房间名称</label>
+    <input type="text" id="editRoomName" placeholder="例：厨房"/>
+    <label>图标</label>
+    <input type="text" id="editRoomIcon" placeholder="例：🍳" maxlength="4"/>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeRoomModal()">取消</button>
+      <button class="btn-del" id="deleteRoomBtn" onclick="deleteRoom()" style="display:none">删除</button>
+      <button class="btn-move" onclick="saveRoom()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Area/Cabinet Modal -->
+<div class="modal-overlay" id="structModal">
+  <div class="modal">
+    <h3 id="structModalTitle">添加区域</h3>
+    <input type="hidden" id="structType"/><input type="hidden" id="structId"/>
+    <label>名称</label>
+    <input type="text" id="structName" placeholder="名称"/>
+    <div id="structZoneSection" style="display:none">
+      <label>层级（逗号分隔）</label>
+      <input type="text" id="structZones" placeholder="上层,中层,下层"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeStructModal()">取消</button>
+      <button class="btn-del" id="deleteStructBtn" onclick="deleteStruct()" style="display:none">删除</button>
+      <button class="btn-move" onclick="saveStruct()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move Overlay -->
+<div class="move-overlay" id="moveOverlay">
+  <div class="move-panel">
+    <h3>📦 移动物品</h3>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:16px" id="moveDesc"></p>
+    <div id="moveTree"></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeMove()">取消</button>
+      <button class="btn-ok" id="moveConfirmBtn" onclick="confirmMove()" disabled>移动到这里</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Cabinet Confirm -->
+<div class="modal-overlay" id="cabDeleteModal">
+  <div class="modal">
+    <h3>⚠️ 删除柜子</h3>
+    <p style="color:var(--text2);margin-bottom:12px" id="cabDeleteDesc"></p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn-move" style="flex:1" onclick="cabDeleteMove()">📦 先移动物品</button>
+      <button class="btn-del" style="flex:1" onclick="cabDeleteForce()">🗑️ 直接删除</button>
+    </div>
+    <button class="btn-cancel" style="width:100%" onclick="closeCabDelete()">取消</button>
+  </div>
+</div>
+
+<script>
+// ===== DATA =====
+let data={rooms:[]};
+let itemProps={};
+
+// Load data from JSON file
+(async function(){
+  try{
+    const resp=await fetch('home-inventory.json?_='+Date.now());
+    if(resp.ok){
+      const json=await resp.json();
+      if(json.data) data=json.data;
+      if(json.itemProps) itemProps=json.itemProps;
+    }
+  }catch(e){console.warn('Failed to load home-inventory.json, using empty data',e)}
+  renderFloorPlan();renderRoomList();
+})();
+
+let currentMode='browse',currentRoom=null,currentCabinet=null,currentZone=null,currentItem=null;
+let searchQuery='',highlightedItems=new Set(),searchMatches=[];
+let batchMode=false,batchSelected=new Set();
+let mapDragState=null;
+let cabDeleteTarget=null;
+
+// ===== HELPERS =====
+function uid(){return '_'+Math.random().toString(36).slice(2,9)}
+function findCabinet(r,id){return r.cabinets.find(c=>c.id===id)||null}
+function findZone(r,id){for(const c of r.cabinets){const z=c.zones.find(z=>z.id===id);if(z)return z}return null}
+function findItemById(id){for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){const i=z.items.find(i=>i.id===id);if(i)return i}return null}
+function findItemLocation(id){for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){if(z.items.find(i=>i.id===id))return{room:r,cabinet:c,zone:z}}return null}
+function findZoneById(zoneId){for(const r of data.rooms)for(const c of r.cabinets){const z=c.zones.find(z=>z.id===zoneId);if(z)return{room:r,cabinet:c,zone:z}}return null}
+function findAllItems(){
+  const items=[];
+  for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){
+    z.items.forEach(i=>items.push({item:i,room:r,cabinet:c,zone:z}));
+  }
+  return items;
+}
+function toast(msg){const el=document.createElement('div');el.className='toast';el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2000)}
+
+// ===== SVG HELPERS =====
+function parsePolygon(s){return s.split(' ').map(p=>p.split(',').map(Number))}
+function polygonCenter(pts){return{x:pts.reduce((s,p)=>s+p[0],0)/pts.length,y:pts.reduce((s,p)=>s+p[1],0)/pts.length}}
+function polygonBBox(pts){return{minX:Math.min(...pts.map(p=>p[0])),maxX:Math.max(...pts.map(p=>p[0])),minY:Math.min(...pts.map(p=>p[1])),maxY:Math.max(...pts.map(p=>p[1]))}}
+function svgPoint(svg,e){const r=svg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*400,y:(e.clientY-r.top)/r.height*300}}
+
+// ===== RENDER FLOOR PLAN =====
+function renderFloorPlan(){
+  const svg=document.getElementById('floorPlanSvg');
+  let html='<rect x="0" y="0" width="400" height="300" fill="#0f172a" rx="8"/>';
+  // Render rooms
+  data.rooms.forEach(r=>{
+    const pts=parsePolygon(r.polygon);
+    const cls=['room-shape'];
+    if(currentRoom===r.id)cls.push('active');
+    if(searchQuery&&highlightedItems.has(r.id))cls.push('highlight');
+    if(searchQuery&&!highlightedItems.has(r.id))cls.push('dimmed');
+    html+=`<polygon data-room="${r.id}" class="${cls.join(' ')}" points="${r.polygon}"/>`;
+    const c=polygonCenter(pts);
+    const lc=searchQuery&&highlightedItems.has(r.id)?'room-label highlight':'room-label';
+    html+=`<text class="${lc}" x="${c.x}" y="${c.y}">${r.icon} ${r.name}</text>`;
+  });
+  // Render cabinets
+  data.rooms.forEach(r=>{
+    r.cabinets.forEach(cab=>{
+      if(!cab.polygon)return;
+      const pts=parsePolygon(cab.polygon);
+      const c=polygonCenter(pts);
+      // Check if this cabinet has search matches
+      const isMatch=searchQuery&&searchMatches.some(m=>m.cabinet.id===cab.id);
+      const opacity=isMatch?'.5':'.25';
+      const stroke=isMatch?'var(--yellow)':'var(--accent2)';
+      const cls=isMatch?'cab-shape highlight':'';
+      html+=`<polygon class="cab-shape ${cls}" data-room="${r.id}" data-cab="${cab.id}" style="opacity:${opacity};cursor:pointer;stroke:${stroke};stroke-width:${isMatch?2:1}" points="${cab.polygon}"/>`;
+      html+=`<text class="cab-label" style="fill:${isMatch?'var(--yellow)':'var(--accent2)'};font-size:9px;pointer-events:none" x="${c.x}" y="${c.y}">${cab.name}</text>`;
+    });
+  });
+  svg.innerHTML=html;
+  svg.querySelectorAll('.room-shape').forEach(el=>el.addEventListener('click',()=>selectRoom(el.dataset.room)));
+  svg.querySelectorAll('.cab-shape').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();selectRoomAndCabinet(el.dataset.room,el.dataset.cab)}));
+}
+
+// ===== RENDER ROOM LIST =====
+function renderRoomList(){
+  const list=document.getElementById('roomList');
+  list.innerHTML=data.rooms.map(r=>{
+    const count=countItems(r);
+    const cls=currentRoom===r.id?'active':(searchQuery&&highlightedItems.has(r.id))?'highlight':'';
+    return`<div class="room-item ${cls}" onclick="selectRoom('${r.id}')">
+      <span>${r.icon}</span><span>${r.name}</span>
+      <span class="count">${count}</span>
+      <div class="room-actions desktop-only">
+        <button onclick="event.stopPropagation();openEditRoom('${r.id}')" title="编辑">✏️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function countItems(r){let n=0;r.cabinets.forEach(c=>c.zones.forEach(z=>{n+=z.items.reduce((s,i)=>s+(i.qty||1),0)}));return n}
+
+// ===== MOBILE NAV =====
+let mobileHistory=[];
+const isMobile=()=>window.innerWidth<=768;
+
+function mobilePush(){
+  if(!isMobile())return;
+  mobileHistory.push({currentRoom,currentCabinet,currentZone,currentItem});
+  document.getElementById('mobileBack').classList.add('show');
+}
+function mobileGoBack(){
+  if(!isMobile()||mobileHistory.length===0)return;
+  const prev=mobileHistory.pop();
+  currentRoom=prev.currentRoom;currentCabinet=prev.currentCabinet;currentZone=prev.currentZone;currentItem=prev.currentItem;
+  if(mobileHistory.length===0){
+    document.getElementById('mobileBack').classList.remove('show');
+    document.querySelector('.detail-panel').classList.remove('mobile-show');
+  }
+  renderDetail();
+}
+function mobileShowDetail(){
+  if(!isMobile())return;
+  document.querySelector('.detail-panel').classList.add('mobile-show');
+}
+
+// ===== SELECT / NAVIGATE =====
+function selectRoom(id){
+  if(isMobile()){
+    const room=data.rooms.find(r=>r.id===id);
+    if(room&&room.cabinets.length>0){
+      mobilePush();
+      currentRoom=id;currentCabinet=null;currentZone=null;currentItem=null;
+      renderDetail();mobileShowDetail();
+    }else{
+      currentRoom=id;currentCabinet=null;currentZone=null;currentItem=null;
+    }
+    renderFloorPlan();renderRoomList();
+  }else{
+    currentRoom=id;currentCabinet=null;currentZone=null;currentItem=null;
+    renderFloorPlan();renderRoomList();renderDetail();
+  }
+}
+function selectRoomAndCabinet(roomId,cabId){
+  if(isMobile())mobilePush();
+  currentRoom=roomId;currentCabinet=cabId;currentZone=null;currentItem=null;
+  if(isMobile()){
+    renderDetail();mobileShowDetail();
+  }else{
+    renderFloorPlan();renderRoomList();renderDetail();
+  }
+}
+function selectCabinet(c){
+  if(isMobile())mobilePush();
+  currentCabinet=c;currentZone=null;currentItem=null;
+  if(isMobile()){
+    renderDetail();mobileShowDetail();
+  }else{
+    renderRoomList();renderDetail();
+  }
+}
+function selectZone(z){
+  if(isMobile())mobilePush();
+  currentZone=z;currentItem=null;
+  if(isMobile()){
+    renderDetail();mobileShowDetail();
+  }else{
+    renderDetail();
+  }
+}
+function showItem(id){
+  for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){
+    if(z.items.find(i=>i.id===id)){
+      currentRoom=r.id;currentCabinet=c.id;currentZone=z.id;currentItem=id;
+      if(isMobile()){
+        mobilePush();
+        renderFloorPlan();renderRoomList();renderDetail();mobileShowDetail();
+      }else{
+        renderFloorPlan();renderRoomList();renderDetail();
+      }
+      return;
+    }
+  }
+}
+function closeItemDetail(){
+  currentItem=null;currentZone=null;
+  if(isMobile()){
+    // Go back one level
+    if(mobileHistory.length>0){
+      const prev=mobileHistory.pop();
+      currentRoom=prev.currentRoom;currentCabinet=prev.currentCabinet;currentZone=prev.currentZone;currentItem=prev.currentItem;
+    }
+    if(mobileHistory.length===0){
+      document.getElementById('mobileBack').classList.remove('show');
+      document.querySelector('.detail-panel').classList.remove('mobile-show');
+    }
+    renderDetail();
+  }else{
+    renderDetail();
+  }
+}
+
+// ===== SEARCH =====
+document.getElementById('searchInput').addEventListener('input',e=>{
+  searchQuery=e.target.value.trim();
+  document.getElementById('searchBtn').style.display=searchQuery?'block':'none';
+  if(searchQuery)setMode('search');
+  searchHighlight(searchQuery);renderDetail();
+});
+document.getElementById('searchInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&searchMatches.length>0){navigateToMatch(0)}
+});
+function doSearch(){if(searchMatches.length>0)navigateToMatch(0)}
+function navigateToMatch(idx){
+  const m=searchMatches[idx];
+  if(!m)return;
+  currentRoom=m.room.id;currentCabinet=m.cabinet.id;currentZone=m.zone.id;currentItem=m.item.id;
+  searchQuery='';document.getElementById('searchInput').value='';
+  document.getElementById('searchBtn').style.display='none';
+  highlightedItems.clear();searchMatches=[];
+  setMode('browse');
+  if(isMobile()){
+    mobileHistory=[];
+    mobilePush();
+    renderFloorPlan();renderRoomList();renderDetail();mobileShowDetail();
+  }else{
+    renderFloorPlan();renderRoomList();renderDetail();
+  }
+}
+
+function searchHighlight(query){
+  if(!query){highlightedItems.clear();searchMatches=[];renderFloorPlan();renderRoomList();return}
+  const q=query.toLowerCase();highlightedItems.clear();searchMatches=[];
+  data.rooms.forEach(r=>{
+    r.cabinets.forEach(c=>{
+      c.zones.forEach(z=>{
+        z.items.forEach(item=>{
+          if(item.name.toLowerCase().includes(q)){
+            highlightedItems.add(r.id);
+            searchMatches.push({room:r,cabinet:c,zone:z,item});
+          }
+        });
+      });
+    });
+  });
+  renderFloorPlan();renderRoomList();
+  if(searchMatches.length>0){
+    const first=searchMatches[0];
+    if(currentRoom!==first.room.id||currentCabinet!==first.cabinet.id){
+      currentRoom=first.room.id;currentCabinet=first.cabinet.id;currentZone=first.zone.id;
+      renderDetail();
+    }
+  }
+}
+
+// ===== DROPDOWN =====
+function toggleDropdown(e){
+  e.stopPropagation();
+  const menu=document.getElementById('sysDropdown');
+  menu.classList.toggle('show');
+}
+document.addEventListener('click',()=>document.getElementById('sysDropdown')?.classList.remove('show'));
+
+// ===== MODE =====
+function setMode(mode){
+  currentMode=mode;
+  if(mode==='browse'){
+    searchQuery='';document.getElementById('searchInput').value='';document.getElementById('searchBtn').style.display='none';
+    searchHighlight('');renderDetail();
+    if(isMobile()){
+      document.querySelector('.detail-panel').classList.remove('mobile-show');
+      mobileHistory=[];
+      document.getElementById('mobileBack').classList.remove('show');
+    }
+  }
+}
+
+// ===== BATCH =====
+function openBatchSelect(){
+  batchMode=!batchMode;
+  batchSelected.clear();
+  document.getElementById('batchBar').classList.toggle('show',batchMode);
+  updateBatchCount();renderDetail();
+}
+function exitBatch(){batchMode=false;batchSelected.clear();document.getElementById('batchBar').classList.remove('show');renderDetail()}
+function toggleBatchItem(id){
+  if(batchSelected.has(id))batchSelected.delete(id);else batchSelected.add(id);
+  updateBatchCount();renderDetail();
+}
+function updateBatchCount(){document.getElementById('batchCount').textContent=batchSelected.size}
+
+function openBatchMove(){
+  if(batchSelected.size===0)return alert('请先选择物品');
+  moveItemIds=[...batchSelected];moveDest=null;
+  document.getElementById('moveDesc').textContent=`移动 ${moveItemIds.length} 件物品到：`;
+  renderMoveTree();
+  document.getElementById('moveOverlay').classList.add('show');
+}
+
+// ===== RENDER DETAIL =====
+function renderDetail(){
+  const panel=document.getElementById('detailPanel');
+  const room=data.rooms.find(r=>r.id===currentRoom);
+  if(!room){panel.innerHTML='<div class="empty-state"><div class="emoji">📦</div><p>选择一个房间开始浏览</p></div>';return}
+
+  let html=`<div class="breadcrumb"><span onclick="selectRoom('${room.id}')">${room.icon} ${room.name}</span>`;
+  if(currentCabinet){const c=findCabinet(room,currentCabinet);if(c)html+=`<span class="sep">›</span><span onclick="selectCabinet('${currentCabinet}')">${c.name}</span>`}
+  if(currentZone){const z=findZone(room,currentZone);if(z)html+=`<span class="sep">›</span><span class="current">${z.name}</span>`}
+  html+='</div>';
+
+  // Context-aware toolbar
+  if(!currentCabinet){
+    html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddCabinet('${room.id}')">➕ 添加柜子</button></div>`;
+  }else if(!currentZone){
+    html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddZone('${currentCabinet}')">➕ 添加位置</button></div>`;
+  }else{
+    html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddItem()">➕ 添加物品</button></div>`;
+  }
+
+  if(!currentCabinet&&room.cabinets.length>0){
+    html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">';
+    room.cabinets.forEach(c=>{
+      const cnt=c.zones.reduce((n,z)=>n+z.items.length,0);
+      html+=`<div class="cabinet-zone" onclick="selectCabinet('${c.id}')">
+        <div class="zone-name">🗄️ ${c.name}</div>
+        <div style="font-size:13px;color:var(--text2)">${cnt} 种物品 · ${c.zones.length} 层</div>
+        <div class="desktop-only" style="position:absolute;top:8px;right:8px;display:flex;gap:4px">
+          <button class="icon-btn" onclick="event.stopPropagation();openEditCabinet('${c.id}')" title="编辑">✏️</button>
+          <button class="icon-btn" onclick="event.stopPropagation();openAddZone('${c.id}')" title="添加位置">＋</button>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  }else if(!currentCabinet&&room.cabinets.length===0){
+    html+=`<div style="margin-top:24px;text-align:center;color:var(--text2)"><p style="font-size:48px;margin-bottom:12px">🗄️</p><p>还没有柜子</p>
+      <button class="toolbar-btn desktop-only" style="margin-top:12px" onclick="openAddCabinet('${room.id}')">➕ 添加柜子</button>
+      <p class="mobile-only" style="margin-top:12px;font-size:13px">请在电脑端添加柜子</p>
+    </div>`;
+  }else if(currentCabinet){
+    const cab=findCabinet(room,currentCabinet);
+    if(cab){
+      html+=`<div class="cabinet-view" style="margin-top:16px"><h3>🗄️ ${cab.name}
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="icon-btn desktop-only" onclick="openBatchSelect()" title="批量选择">☑️</button>
+          <button class="icon-btn desktop-only" onclick="openAddZone('${cab.id}')" title="添加层级">＋</button>
+        </div>
+      </h3><div class="cabinet-grid">`;
+      cab.zones.forEach(z=>{
+        html+=`<div class="cabinet-zone ${currentZone===z.id?'active':''}" onclick="selectZone('${z.id}')">
+          <div class="zone-name" style="display:flex;align-items:center;gap:6px">${z.name}
+            <span class="desktop-only" style="margin-left:auto;display:flex;gap:3px">
+              <button class="icon-btn" style="width:22px;height:22px;font-size:11px" onclick="event.stopPropagation();openEditZone('${cab.id}','${z.id}')" title="编辑层级">✏️</button>
+              <button class="icon-btn" style="width:22px;height:22px;font-size:11px" onclick="event.stopPropagation();confirmDeleteZone('${cab.id}','${z.id}')" title="删除层级">✕</button>
+            </span>
+          </div>
+          <div class="zone-items">`;
+        z.items.forEach(item=>{
+          const isHL=searchQuery&&item.name.toLowerCase().includes(searchQuery.toLowerCase());
+          const isSel=batchMode&&batchSelected.has(item.id);
+          const qtyText=item.qtyTotal>1?`<span class="qty-badge">${item.qty}/${item.qtyTotal}</span>`:'';
+          const evt=batchMode?`event.stopPropagation();toggleBatchItem('${item.id}')`:`event.stopPropagation();showItem('${item.id}')`;
+          html+=`<span class="zone-item ${isHL?'highlight':''} ${isSel?'selected':''}" onclick="${evt}">${item.name}${qtyText}</span>`;
+        });
+        html+='</div></div>';
+      });
+      html+='</div></div>';
+    }
+  }
+
+  // Item detail - show only selected item
+  if(currentZone&&!batchMode&&currentItem){
+    const zone=findZone(room,currentZone);
+    if(zone){
+      const item=zone.items.find(i=>i.id===currentItem);
+      if(item){
+        const props=itemProps[item.id]||{};
+        const qty=item.qty??1,qtyTotal=item.qtyTotal??1;
+        const pct=qtyTotal>0?qty/qtyTotal:1;
+        const qtyColor=pct>.6?'var(--green)':pct>.3?'var(--orange)':'var(--red)';
+        html+=`<div class="item-detail" style="margin-top:12px">
+          <h3>🏷️ ${item.name} <button class="close-btn" onclick="closeItemDetail()">✕</button></h3>
+          <div class="item-photo">📦</div>
+          <div class="item-props">
+            <div class="prop-card"><div class="prop-label">📍 位置</div><div class="prop-value">${room.name} › ${findCabinet(room,currentCabinet)?.name||''} › ${zone.name} › ${item.position||''}</div></div>
+            <div class="prop-card"><div class="prop-label">📦 数量</div><div class="prop-value">${qty} / ${qtyTotal}</div><div class="quantity-bar"><div class="quantity-fill" style="width:${pct*100}%;background:${qtyColor}"></div></div></div>
+            <div class="prop-card"><div class="prop-label">📅 放入日期</div><div class="prop-value">${props.dateStored||'未记录'}</div></div>
+            <div class="prop-card"><div class="prop-label">⏰ 保质期</div><div class="prop-value">${props.expiry||'无'}</div></div>
+            ${props.note?`<div class="prop-card full"><div class="prop-label">📝 备注</div><div class="prop-value">${props.note}</div></div>`:''}
+          </div>
+          ${item.tags?.length?`<div class="item-tags">${item.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`:''}
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="toolbar-btn" onclick="openEditItem('${item.id}')">✏️ 编辑</button>
+            <button class="toolbar-btn" onclick="openMoveSingle('${item.id}')">📦 移动</button>
+          </div>
+        </div>`;
+      }
+    }
+  }
+  panel.innerHTML=html;
+}
+
+// ===== MAP EDITOR =====
+function openMapEditor(){
+  // Save snapshot for cancel
+  mapSnapshot=JSON.parse(JSON.stringify(data));
+  document.getElementById('mapEditorOverlay').classList.add('show');renderMapEditor()
+}
+function saveMapEditor(){mapSnapshot=null;document.getElementById('mapEditorOverlay').classList.remove('show');renderFloorPlan();renderRoomList();toast('户型图已保存')}
+function cancelMapEditor(){if(mapSnapshot){data=mapSnapshot;mapSnapshot=null}document.getElementById('mapEditorOverlay').classList.remove('show');renderFloorPlan();renderRoomList()}
+let mapSnapshot=null;
+
+function renderMapEditor(){
+  const svg=document.getElementById('mapEditorSvg');
+  let html='<rect x="0" y="0" width="400" height="300" fill="#0f172a" rx="8"/>';
+  // Grid lines
+  for(let x=0;x<=400;x+=20){html+=`<line x1="${x}" y1="0" x2="${x}" y2="300" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,4"/>`}
+  for(let y=0;y<=300;y+=20){html+=`<line x1="0" y1="${y}" x2="400" y2="${y}" stroke="#1e293b" stroke-width="0.5" stroke-dasharray="2,4"/>`}
+  // Snap guide lines
+  if(mapDragState&&mapDragState.snapGuides){
+    mapDragState.snapGuides.forEach(g=>{
+      if(g.type==='v')html+=`<line x1="${g.pos}" y1="0" x2="${g.pos}" y2="300" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4" opacity=".7"/>`;
+      else html+=`<line x1="0" y1="${g.pos}" x2="400" y2="${g.pos}" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4" opacity=".7"/>`;
+    });
+  }
+  // Render rooms as groups
+  data.rooms.forEach(r=>{
+    const pts=parsePolygon(r.polygon);
+    const active=mapDragState&&mapDragState.roomId===r.id&&mapDragState.dragType==='room';
+    const bb=polygonBBox(pts);
+    const cx=(bb.minX+bb.maxX)/2, cy=(bb.minY+bb.maxY)/2;
+    html+=`<g class="room-group ${active?'active':''}" data-room="${r.id}">`;
+    html+=`<polygon class="room-shape" style="opacity:.5;cursor:move" points="${r.polygon}"/>`;
+    html+=`<text class="room-label" x="${cx}" y="${cy}">${r.icon} ${r.name}</text>`;
+    // 8 resize handles
+    [{x:bb.minX,y:bb.minY,c:'nwse-resize',d:'tl'},{x:cx,y:bb.minY,c:'ns-resize',d:'tm'},{x:bb.maxX,y:bb.minY,c:'nesw-resize',d:'tr'},{x:bb.maxX,y:cy,c:'ew-resize',d:'mr'},{x:bb.maxX,y:bb.maxY,c:'nwse-resize',d:'br'},{x:cx,y:bb.maxY,c:'ns-resize',d:'bm'},{x:bb.minX,y:bb.maxY,c:'nesw-resize',d:'bl'},{x:bb.minX,y:cy,c:'ew-resize',d:'ml'}].forEach(h=>{
+      html+=`<rect class="handle" data-room="${r.id}" data-dir="${h.d}" x="${h.x-5}" y="${h.y-5}" width="10" height="10" rx="2" style="cursor:${h.c}"/>`;
+    });
+    html+='</g>';
+  });
+  // Render cabinets (above rooms)
+  data.rooms.forEach(r=>{
+    r.cabinets.forEach(cab=>{
+      if(!cab.polygon)return;
+      const pts=parsePolygon(cab.polygon);
+      const active=mapDragState&&mapDragState.roomId===cab.id&&mapDragState.dragType==='cabinet';
+      const bb=polygonBBox(pts);
+      const cx=(bb.minX+bb.maxX)/2, cy=(bb.minY+bb.maxY)/2;
+      html+=`<g class="cab-group ${active?'active':''}" data-cab="${cab.id}" data-room="${r.id}">`;
+      html+=`<polygon class="cab-shape" points="${cab.polygon}"/>`;
+      html+=`<text class="cab-label" x="${cx}" y="${cy}">${cab.name}</text>`;
+      [{x:bb.minX,y:bb.minY,c:'nwse-resize',d:'tl'},{x:cx,y:bb.minY,c:'ns-resize',d:'tm'},{x:bb.maxX,y:bb.minY,c:'nesw-resize',d:'tr'},{x:bb.maxX,y:cy,c:'ew-resize',d:'mr'},{x:bb.maxX,y:bb.maxY,c:'nwse-resize',d:'br'},{x:cx,y:bb.maxY,c:'ns-resize',d:'bm'},{x:bb.minX,y:bb.maxY,c:'nesw-resize',d:'bl'},{x:bb.minX,y:cy,c:'ew-resize',d:'ml'}].forEach(h=>{
+        html+=`<rect class="handle" data-cab="${cab.id}" data-room="${r.id}" data-dir="${h.d}" x="${h.x-5}" y="${h.y-5}" width="10" height="10" rx="2" style="cursor:${h.c}"/>`;
+      });
+      html+='</g>';
+    });
+  });
+  svg.innerHTML=html;
+
+  // Sidebar
+  const sidebar=document.getElementById('mapEditorSidebar');
+  sidebar.innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">拖动房间/柜子移动，拖拽边角调整大小</div>`+
+    data.rooms.map(r=>`<div class="room-list-item" onclick="mapSelectRoom('${r.id}')"><span>${r.icon} ${r.name}</span><button class="del" onclick="event.stopPropagation();confirmDeleteRoom('${r.id}')">🗑️</button></div>`).join('');
+
+  // Events - rooms
+  svg.querySelectorAll('.room-group .room-shape').forEach(el=>{
+    el.addEventListener('mousedown',e=>mapStartDrag(e,el.parentElement.dataset.room,'move','room'));
+  });
+  svg.querySelectorAll('.room-group .handle').forEach(el=>{
+    el.addEventListener('mousedown',e=>{e.stopPropagation();mapStartDrag(e,el.dataset.room,el.dataset.dir,'room')});
+  });
+  // Events - cabinets
+  svg.querySelectorAll('.cab-group .cab-shape').forEach(el=>{
+    el.addEventListener('mousedown',e=>mapStartDrag(e,el.parentElement.dataset.cab,'move','cabinet'));
+  });
+  svg.querySelectorAll('.cab-group .handle').forEach(el=>{
+    el.addEventListener('mousedown',e=>{e.stopPropagation();mapStartDrag(e,el.dataset.cab,el.dataset.dir,'cabinet')});
+  });
+}
+
+function mapSelectRoom(id){
+  document.querySelectorAll('.map-editor-sidebar .room-list-item').forEach(el=>el.classList.remove('active'));
+}
+
+function mapStartDrag(e,id,type,dragType){
+  e.preventDefault();
+  const svg=document.getElementById('mapEditorSvg');
+  const pt=svgPoint(svg,e);
+  let origPolygon;
+  if(dragType==='cabinet'){
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){origPolygon=c.polygon;break}}
+  }else{
+    const room=data.rooms.find(r=>r.id===id);if(room)origPolygon=room.polygon;
+  }
+  if(!origPolygon)return;
+  mapDragState={roomId:id,type,startX:pt.x,startY:pt.y,origPolygon,dragType};
+  document.addEventListener('mousemove',mapOnDrag);
+  document.addEventListener('mouseup',mapEndDrag);
+}
+
+function snapVal(val,grid,edges,threshold){
+  // Snap to grid
+  const gRound=Math.round(val/grid)*grid;
+  if(Math.abs(gRound-val)<threshold)return{snapped:gRound,guide:null};
+  // Snap to edges of other rooms
+  for(const e of edges){if(Math.abs(e-val)<threshold)return{snapped:e,guide:null};}
+  return{snapped:val,guide:null};
+}
+
+function getSnapEdges(excludeId){
+  const edgesX=[],edgesY=[];
+  data.rooms.forEach(r=>{
+    if(r.id===excludeId)return;
+    const bb=polygonBBox(parsePolygon(r.polygon));
+    edgesX.push(bb.minX,bb.maxX,(bb.minX+bb.maxX)/2);
+    edgesY.push(bb.minY,bb.maxY,(bb.minY+bb.maxY)/2);
+  });
+  return{edgesX,edgesY};
+}
+
+function mapOnDrag(e){
+  if(!mapDragState)return;
+  const svg=document.getElementById('mapEditorSvg');
+  const pt=svgPoint(svg,e);
+  const orig=parsePolygon(mapDragState.origPolygon);
+  const dx=pt.x-mapDragState.startX, dy=pt.y-mapDragState.startY;
+  const GRID=10,THRESH=6;
+  const guides=[];
+
+  // Find parent room bounds for cabinet constraint
+  let parentBBox=null;
+  if(mapDragState.dragType==='cabinet'){
+    for(const r of data.rooms){
+      if(r.cabinets.find(c=>c.id===mapDragState.roomId)){parentBBox=polygonBBox(parsePolygon(r.polygon));break}
+    }
+  }
+  const edges=parentBBox?{edgesX:[parentBBox.minX,parentBBox.maxX],edgesY:[parentBBox.minY,parentBBox.maxY]}:getSnapEdges(mapDragState.roomId);
+
+  // Find the target element
+  let target=null;
+  if(mapDragState.dragType==='cabinet'){
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===mapDragState.roomId);if(c){target=c;break}}
+  }else{
+    target=data.rooms.find(r=>r.id===mapDragState.roomId);
+  }
+  if(!target)return;
+
+  if(mapDragState.type==='move'){
+    const bb0=polygonBBox(orig);
+    let nMinX=snapVal(bb0.minX+dx,GRID,edges.edgesX,THRESH).snapped;
+    let nMinY=snapVal(bb0.minY+dy,GRID,edges.edgesY,THRESH).snapped;
+    const w=bb0.maxX-bb0.minX, h=bb0.maxY-bb0.minY;
+    // Constrain to parent bounds
+    if(parentBBox){
+      nMinX=Math.max(parentBBox.minX,Math.min(nMinX,parentBBox.maxX-w));
+      nMinY=Math.max(parentBBox.minY,Math.min(nMinY,parentBBox.maxY-h));
+    }
+    target.polygon=`${nMinX},${nMinY} ${nMinX+w},${nMinY} ${nMinX+w},${nMinY+h} ${nMinX},${nMinY+h}`;
+  }else{
+    const bb=polygonBBox(orig);
+    let nMinX=bb.minX,nMaxX=bb.maxX,nMinY=bb.minY,nMaxY=bb.maxY;
+    const dir=mapDragState.type;
+    if(dir.includes('l')){const s=snapVal(bb.minX+dx,GRID,edges.edgesX,THRESH);nMinX=Math.min(s.snapped,bb.maxX-20)}
+    if(dir.includes('r')){const s=snapVal(bb.maxX+dx,GRID,edges.edgesX,THRESH);nMaxX=Math.max(s.snapped,bb.minX+20)}
+    if(dir.includes('t')||dir==='tm'){const s=snapVal(bb.minY+dy,GRID,edges.edgesY,THRESH);nMinY=Math.min(s.snapped,bb.maxY-20)}
+    if(dir.includes('b')||dir==='bm'){const s=snapVal(bb.maxY+dy,GRID,edges.edgesY,THRESH);nMaxY=Math.max(s.snapped,bb.minY+20)}
+    if(dir==='ml'){const s=snapVal(bb.minX+dx,GRID,edges.edgesX,THRESH);nMinX=Math.min(s.snapped,bb.maxX-20)}
+    if(dir==='mr'){const s=snapVal(bb.maxX+dx,GRID,edges.edgesX,THRESH);nMaxX=Math.max(s.snapped,bb.minX+20)}
+    // Constrain to parent bounds
+    if(parentBBox){
+      nMinX=Math.max(parentBBox.minX,nMinX);
+      nMinY=Math.max(parentBBox.minY,nMinY);
+      nMaxX=Math.min(parentBBox.maxX,nMaxX);
+      nMaxY=Math.min(parentBBox.maxY,nMaxY);
+    }
+    target.polygon=`${nMinX},${nMinY} ${nMaxX},${nMinY} ${nMaxX},${nMaxY} ${nMinX},${nMaxY}`;
+  }
+  mapDragState.snapGuides=guides;
+  renderMapEditor();
+}
+
+function mapEndDrag(){
+  if(mapDragState){
+    let target=null;
+    if(mapDragState.dragType==='cabinet'){
+      for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===mapDragState.roomId);if(c){target=c;break}}
+    }else{
+      target=data.rooms.find(r=>r.id===mapDragState.roomId);
+    }
+    if(target){
+      const pts=parsePolygon(target.polygon);
+      target.polygon=pts.map(p=>`${Math.round(p[0]/10)*10},${Math.round(p[1]/10)*10}`).join(' ');
+    }
+  }
+  mapDragState=null;
+  document.removeEventListener('mousemove',mapOnDrag);
+  document.removeEventListener('mouseup',mapEndDrag);
+  renderMapEditor();
+}
+
+
+
+function confirmDeleteRoom(id){
+  const room=data.rooms.find(r=>r.id===id);if(!room)return;
+  const itemCount=countItems(room);
+  if(itemCount>0&&!confirm(`「${room.name}」里有 ${itemCount} 件物品，删除房间会同时删除所有内容。确定？`))return;
+  data.rooms=data.rooms.filter(r=>r.id!==id);
+  if(currentRoom===id){currentRoom=null;currentCabinet=null;currentZone=null}
+  renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast('房间已删除');
+}
+
+// ===== ROOM MODAL =====
+function openAddRoom(){
+  document.getElementById('roomModalTitle').textContent='添加房间';
+  document.getElementById('editRoomId').value='';
+  document.getElementById('editRoomName').value='';
+  document.getElementById('editRoomIcon').value='';
+  document.getElementById('deleteRoomBtn').style.display='none';
+  document.getElementById('roomModal').classList.add('show');
+}
+function openEditRoom(id){
+  const room=data.rooms.find(r=>r.id===id);if(!room)return;
+  document.getElementById('roomModalTitle').textContent='编辑房间';
+  document.getElementById('editRoomId').value=id;
+  document.getElementById('editRoomName').value=room.name;
+  document.getElementById('editRoomIcon').value=room.icon;
+  document.getElementById('deleteRoomBtn').style.display='';
+  document.getElementById('roomModal').classList.add('show');
+}
+function closeRoomModal(){document.getElementById('roomModal').classList.remove('show')}
+function saveRoom(){
+  const id=document.getElementById('editRoomId').value;
+  const name=document.getElementById('editRoomName').value.trim();
+  const icon=document.getElementById('editRoomIcon').value.trim()||'📦';
+  if(!name)return alert('请输入房间名称');
+  if(id){const r=data.rooms.find(r=>r.id===id);if(r){r.name=name;r.icon=icon}}
+  else{data.rooms.push({id:'room_'+uid(),name,icon,polygon:'150,10 250,10 250,80 150,80',cabinets:[]})}
+  closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast(id?'已更新':'已添加');
+}
+function deleteRoom(){
+  const id=document.getElementById('editRoomId').value;
+  if(!id)return;
+  const room=data.rooms.find(r=>r.id===id);
+  if(room&&countItems(room)>0&&!confirm(`「${room.name}」里有物品，确定删除？`))return;
+  data.rooms=data.rooms.filter(r=>r.id!==id);
+  if(currentRoom===id){currentRoom=null;currentCabinet=null;currentZone=null}
+  closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast('已删除');
+}
+
+// ===== CABINET MODAL =====
+function openAddCabinet(roomId){
+  document.getElementById('structModalTitle').textContent='添加柜子';
+  document.getElementById('structType').value='cabinet';document.getElementById('structId').value=roomId;
+  document.getElementById('structName').value='';
+  document.getElementById('structZoneSection').style.display='';
+  document.getElementById('structZones').value='';
+  document.getElementById('deleteStructBtn').style.display='none';
+  document.getElementById('structModal').classList.add('show');
+}
+function openEditCabinet(id){
+  for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
+    document.getElementById('structModalTitle').textContent='编辑柜子';
+    document.getElementById('structType').value='edit-cabinet';document.getElementById('structId').value=id;
+    document.getElementById('structName').value=c.name;
+    document.getElementById('structZoneSection').style.display='';
+    document.getElementById('structZones').value=c.zones.map(z=>z.name).join(', ');
+    document.getElementById('deleteStructBtn').style.display='';
+    document.getElementById('structModal').classList.add('show');return;
+  }}
+}
+function openAddZone(cabId){
+  document.getElementById('structModalTitle').textContent='添加位置';
+  document.getElementById('structType').value='zone';document.getElementById('structId').value=cabId;
+  document.getElementById('structName').value='';
+  document.getElementById('structZoneSection').style.display='none';
+  document.getElementById('deleteStructBtn').style.display='none';
+  document.getElementById('structModal').classList.add('show');
+}
+function openEditZone(cabId,zoneId){
+  for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===cabId);if(c){const z=c.zones.find(z=>z.id===zoneId);if(z){
+    document.getElementById('structModalTitle').textContent='编辑位置';
+    document.getElementById('structType').value='edit-zone';
+    document.getElementById('structId').value=JSON.stringify({cabId,zoneId});
+    document.getElementById('structName').value=z.name;
+    document.getElementById('structZoneSection').style.display='none';
+    document.getElementById('deleteStructBtn').style.display='';
+    document.getElementById('structModal').classList.add('show');return;
+  }}}
+}
+function confirmDeleteZone(cabId,zoneId){
+  for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===cabId);if(c){const z=c.zones.find(z=>z.id===zoneId);if(z){
+    if(z.items.length>0){
+      cabDeleteTarget={room:r,cabinet:c,zone:z,type:'zone'};
+      showCabDelete(z.name,z.items.length);
+    }else{
+      if(confirm(`确定删除位置「${z.name}」？`)){c.zones=c.zones.filter(x=>x.id!==zoneId);renderDetail();toast('已删除')}
+    }
+    return;
+  }}}
+}
+function closeStructModal(){document.getElementById('structModal').classList.remove('show')}
+
+function saveStruct(){
+  const type=document.getElementById('structType').value;
+  const id=document.getElementById('structId').value;
+  const name=document.getElementById('structName').value.trim();
+  if(!name)return alert('请输入名称');
+  if(type==='cabinet'){
+    const zones=document.getElementById('structZones').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const r=data.rooms.find(r=>r.id===id);if(r){
+      const cab={id:'cab_'+uid(),name,zones:zones.map(z=>({id:'zone_'+uid(),name:z,items:[]}))};
+      r.cabinets.push(cab);currentCabinet=cab.id;
+    }
+  }else if(type==='edit-cabinet'){
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
+      c.name=name;
+      const zn=document.getElementById('structZones').value.split(',').map(s=>s.trim()).filter(Boolean);
+      if(zn.length>0){const ex=new Map(c.zones.map(z=>[z.name,z]));c.zones=zn.map(n=>ex.get(n)||{id:'zone_'+uid(),name:n,items:[]})}
+      break;
+    }}
+  }else if(type==='zone'){
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){c.zones.push({id:'zone_'+uid(),name,items:[]});break}}
+  }else if(type==='edit-zone'){
+    const ids=JSON.parse(id);
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===ids.cabId);if(c){const z=c.zones.find(z=>z.id===ids.zoneId);if(z){z.name=name;break}}}
+  }
+  closeStructModal();renderDetail();toast('已保存');
+}
+
+function deleteStruct(){
+  const type=document.getElementById('structType').value,id=document.getElementById('structId').value;
+  if(type==='edit-cabinet'){
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
+      const total=c.zones.reduce((n,z)=>n+z.items.length,0);
+      if(total>0){cabDeleteTarget={room:r,cabinet:c,type:'cabinet'};showCabDelete(c.name,total);return}
+      r.cabinets=r.cabinets.filter(x=>x.id!==id);closeStructModal();renderDetail();toast('已删除');return;
+    }}
+  }else if(type==='edit-zone'){
+    const ids=JSON.parse(id);
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===ids.cabId);if(c){const z=c.zones.find(z=>z.id===ids.zoneId);if(z){
+      if(z.items.length>0){cabDeleteTarget={room:r,cabinet:c,zone:z,type:'zone'};showCabDelete(z.name,z.items.length);return}
+      c.zones=c.zones.filter(x=>x.id!==ids.zoneId);closeStructModal();renderDetail();toast('已删除');return;
+    }}}
+  }
+}
+
+function showCabDelete(name,count){
+  document.getElementById('cabDeleteDesc').textContent=`「${name}」里还有 ${count} 件物品，请先移动到其他柜子再删除，或直接删除。`;
+  document.getElementById('cabDeleteModal').classList.add('show');
+}
+function closeCabDelete(){document.getElementById('cabDeleteModal').classList.remove('show');cabDeleteTarget=null}
+function cabDeleteMove(){
+  if(!cabDeleteTarget)return;
+  const {cabinet,zone,type}=cabDeleteTarget;
+  const allItems=[];
+  if(type==='zone'&&zone){zone.items.forEach(i=>allItems.push(i))}
+  else{cabinet.zones.forEach(z=>z.items.forEach(i=>allItems.push(i)))}
+  closeCabDelete();
+  moveItemIds=allItems.map(i=>i.id);moveDest=null;
+  document.getElementById('moveDesc').textContent=`移动 ${allItems.length} 件物品到：`;
+  renderMoveTree();
+  document.getElementById('moveOverlay').classList.add('show');
+  pendingCabDelete=cabDeleteTarget;
+}
+function cabDeleteForce(){
+  if(!cabDeleteTarget)return;
+  const{room,cabinet,zone,type}=cabDeleteTarget;
+  if(type==='zone'&&zone){cabinet.zones=cabinet.zones.filter(z=>z.id!==zone.id)}
+  else{room.cabinets=room.cabinets.filter(c=>c.id!==cabinet.id)}
+  closeCabDelete();closeStructModal();renderDetail();toast('已删除');
+}
+let pendingCabDelete=null;
+
+// ===== ITEM MODAL =====
+// ===== ITEM LOCATION SELECTORS =====
+function populateLocationSelects(selRoom,selCab,selZone){
+  const roomSel=document.getElementById('editRoom');
+  const cabSel=document.getElementById('editCabinet');
+  const zoneSel=document.getElementById('editZone');
+  // Hide area select
+  const areaSel=document.getElementById('editArea');if(areaSel)areaSel.parentElement.style.display='none';
+  // Populate rooms
+  roomSel.innerHTML='<option value="">选择房间</option>'+data.rooms.map(r=>`<option value="${r.id}" ${r.id===selRoom?'selected':''}>${r.icon} ${r.name}</option>`).join('');
+  // Populate cabinets
+  const room=data.rooms.find(r=>r.id===selRoom);
+  cabSel.innerHTML='<option value="">选择柜子</option>'+(room?room.cabinets.map(c=>`<option value="${c.id}" ${c.id===selCab?'selected':''}>${c.name}</option>`).join(''):'');
+  // Populate zones
+  const cab=room?.cabinets.find(c=>c.id===selCab);
+  zoneSel.innerHTML='<option value="">选择位置</option>'+(cab?cab.zones.map(z=>`<option value="${z.id}" ${z.id===selZone?'selected':''}>${z.name}</option>`).join(''):'');
+}
+
+// Cascade dropdown events
+function setupLocationCascade(){
+  document.getElementById('editRoom').addEventListener('change',function(){
+    const room=data.rooms.find(r=>r.id===this.value);
+    const cabSel=document.getElementById('editCabinet');
+    cabSel.innerHTML='<option value="">选择柜子</option>'+(room?room.cabinets.map(c=>`<option value="${c.id}">${c.name}</option>`).join(''):'');
+    document.getElementById('editZone').innerHTML='<option value="">选择位置</option>';
+  });
+  document.getElementById('editCabinet').addEventListener('change',function(){
+    const room=data.rooms.find(r=>r.id===document.getElementById('editRoom').value);
+    const cab=room?.cabinets.find(c=>c.id===this.value);
+    const zoneSel=document.getElementById('editZone');
+    zoneSel.innerHTML='<option value="">选择位置</option>'+(cab?cab.zones.map(z=>`<option value="${z.id}">${z.name}</option>`).join(''):'');
+  });
+}
+setupLocationCascade();
+
+function openEditItem(id){
+  const item=findItemById(id);if(!item)return;
+  const props=itemProps[item.id]||{};
+  const loc=findItemLocation(id);
+  document.getElementById('modalTitle').textContent='编辑物品';
+  document.getElementById('editItemId').value=id;
+  document.getElementById('editName').value=item.name;
+  document.getElementById('editPosition').value=item.position||'';
+  document.getElementById('editDate').value=props.dateStored||'';
+  document.getElementById('editExpiry').value=props.expiry||'';
+  document.getElementById('editQtyNum').value=item.qty??1;
+  document.getElementById('editQtyTotal').value=item.qtyTotal??1;
+  document.getElementById('editTags').value=(item.tags||[]).join(', ');
+  document.getElementById('editNote').value=props.note||'';
+  document.getElementById('deleteBtn').style.display='';
+  if(loc)populateLocationSelects(loc.room.id,loc.cabinet.id,loc.zone.id);
+  else populateLocationSelects(currentRoom,currentCabinet,currentZone);
+  document.getElementById('editModal').classList.add('show');
+}
+function openAddItem(){
+  document.getElementById('modalTitle').textContent='添加物品';
+  document.getElementById('editItemId').value='';
+  document.getElementById('editName').value='';
+  document.getElementById('editPosition').value='';
+  document.getElementById('editDate').value='';
+  document.getElementById('editExpiry').value='';
+  document.getElementById('editQtyNum').value=1;
+  document.getElementById('editQtyTotal').value=1;
+  document.getElementById('editTags').value='';
+  document.getElementById('editNote').value='';
+  document.getElementById('deleteBtn').style.display='none';
+  populateLocationSelects(currentRoom,currentCabinet,currentZone);
+  document.getElementById('editModal').classList.add('show');
+}
+function closeModal(){document.getElementById('editModal').classList.remove('show')}
+
+function saveItem(){
+  const id=document.getElementById('editItemId').value;
+  const name=document.getElementById('editName').value.trim();
+  if(!name)return alert('请输入物品名称');
+  const pos=document.getElementById('editPosition').value.trim();
+  const date=document.getElementById('editDate').value;
+  const expiry=document.getElementById('editExpiry').value;
+  const qty=parseInt(document.getElementById('editQtyNum').value)||1;
+  const qtyTotal=parseInt(document.getElementById('editQtyTotal').value)||1;
+  const tags=document.getElementById('editTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const note=document.getElementById('editNote').value.trim();
+  const selZoneId=document.getElementById('editZone').value;
+  if(id){
+    // If zone changed, move item
+    if(selZoneId){
+      const oldLoc=findItemLocation(id);
+      const newLoc=findZoneById(selZoneId);
+      if(oldLoc&&newLoc&&oldLoc.zone.id!==selZoneId){
+        const item=oldLoc.zone.items.find(i=>i.id===id);
+        if(item){oldLoc.zone.items.splice(oldLoc.zone.items.indexOf(item),1);newLoc.zone.items.push(item)}
+      }
+    }
+    const item=findItemById(id);if(item){item.name=name;item.position=pos;item.tags=tags;item.qty=qty;item.qtyTotal=qtyTotal}
+    itemProps[id]={dateStored:date,expiry:expiry||null,note};
+  }else{
+    const newId='item_'+uid();
+    let tz=null;
+    if(selZoneId){
+      const loc=findZoneById(selZoneId);
+      if(loc)tz=loc.zone;
+    }
+    if(!tz){
+      const room=data.rooms.find(r=>r.id===currentRoom);
+      if(room)for(const c of room.cabinets)for(const z of c.zones)tz=z;
+    }
+    if(!tz){alert('请先选择一个位置');return}
+    tz.items.push({id:newId,name,position:pos,tags,qty,qtyTotal});
+    itemProps[newId]={dateStored:date,expiry:expiry||null,note};
+  }
+  closeModal();renderDetail();toast(id?'已更新':'已添加');
+}
+
+function deleteItem(){
+  const id=document.getElementById('editItemId').value;
+  if(!id||!confirm('确定删除此物品？'))return;
+  for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){
+    const idx=z.items.findIndex(i=>i.id===id);
+    if(idx>=0){z.items.splice(idx,1);delete itemProps[id];closeModal();renderDetail();toast('已删除');return}
+  }
+}
+
+// ===== MOVE =====
+let moveItemIds=[],moveDest=null;
+function openMoveSingle(id){moveItemIds=[id];moveDest=null;document.getElementById('moveDesc').textContent=`移动「${findItemById(id)?.name||''}」到：`;renderMoveTree();document.getElementById('moveOverlay').classList.add('show')}
+function closeMove(){
+  document.getElementById('moveOverlay').classList.remove('show');
+  if(pendingCabDelete){
+    const{room,cabinet,zone,type}=pendingCabDelete;
+    if(type==='zone'&&zone){
+      const remaining=zone.items.length;
+      if(remaining===0){cabinet.zones=cabinet.zones.filter(z=>z.id!==zone.id);toast('物品已移动，位置已删除')}
+      else{toast('物品未完全移动，请手动删除')}
+    }else{
+      const total=cabinet.zones.reduce((n,z)=>n+z.items.length,0);
+      if(total===0){room.cabinets=room.cabinets.filter(c=>c.id!==cabinet.id);toast('物品已移动，柜子已删除')}
+      else{toast('物品已移动，但柜子仍有物品，请手动删除')}
+    }
+    pendingCabDelete=null;closeStructModal();renderDetail();
+  }
+  moveItemIds=[];moveDest=null;
+}
+
+function renderMoveTree(){
+  const div=document.getElementById('moveTree');let html='';
+  data.rooms.forEach(r=>{
+    html+=`<div style="margin-bottom:8px"><div style="font-weight:600;margin-bottom:4px">${r.icon} ${r.name}</div>`;
+    if(r.cabinets.length===0)html+='<div style="color:var(--text2);font-size:12px;padding-left:20px">无柜子</div>';
+    r.cabinets.forEach(c=>{
+      html+=`<div style="padding-left:20px;margin-bottom:4px"><div style="font-size:13px">🗄️ ${c.name}</div>`;
+      c.zones.forEach(z=>{
+        const destId=`${r.id}/${c.id}/${z.id}`;
+        html+=`<div class="move-option ${moveDest===destId?'selected':''}" onclick="selectMoveDest('${destId}')"><span>${z.name}</span><span class="dest">${z.items.length} 种物品</span></div>`;
+      });
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  div.innerHTML=html;
+}
+
+function selectMoveDest(dest){moveDest=dest;document.getElementById('moveConfirmBtn').disabled=false;renderMoveTree()}
+
+function confirmMove(){
+  if(!moveItemIds.length||!moveDest)return;
+  const[loc,cabId,zoneId]=moveDest.split('/');
+  const moved=[];
+  moveItemIds.forEach(id=>{
+    for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){
+      const idx=z.items.findIndex(i=>i.id===id);
+      if(idx>=0){moved.push(z.items.splice(idx,1)[0]);return}
+    }
+  });
+  const room=data.rooms.find(r=>r.id===loc);
+  if(room)for(const c of room.cabinets)if(c.id===cabId)for(const z of c.zones)if(z.id===zoneId){
+    z.items.push(...moved);
+  }
+  closeMove();toast(`已移动 ${moved.length} 件物品`);
+  currentRoom=loc;currentCabinet=cabId;currentZone=zoneId;
+  exitBatch();renderFloorPlan();renderRoomList();renderDetail();
+}
+
+// ===== EXPORT / IMPORT =====
+function exportData(){
+  const exportObj={data,itemProps};
+  const blob=new Blob([JSON.stringify(exportObj,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='home-inventory.json';a.click();toast('已导出');
+}
+function importData(){
+  const input=document.createElement('input');input.type='file';input.accept='.json';
+  input.onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();r.onload=ev=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(d.data&&d.data.rooms){
+          data=d.data;
+          if(d.itemProps)Object.assign(itemProps,d.itemProps);
+          // Migrate old format: areas → cabinets
+          data.rooms.forEach(room=>{
+            if(room.areas&&!room.cabinets){
+              room.cabinets=[];
+              room.areas.forEach(a=>room.cabinets.push(...a.cabinets));
+              delete room.areas;
+            }
+          });
+        }else if(d.rooms){
+          data=d;
+          data.rooms.forEach(room=>{
+            if(room.areas&&!room.cabinets){
+              room.cabinets=[];
+              room.areas.forEach(a=>room.cabinets.push(...a.cabinets));
+              delete room.areas;
+            }
+          });
+        }
+        renderFloorPlan();renderRoomList();renderDetail();toast('导入成功')
+      }catch(e){alert('导入失败: '+e.message)}
+    };
+    r.readAsText(f);
+  };input.click();
+}
+
+// ===== INIT =====
+// Data loaded from home-inventory.json via async IIFE above
+</script>
+</body>
+</html>

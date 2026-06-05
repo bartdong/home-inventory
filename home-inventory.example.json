@@ -1,0 +1,50 @@
+{
+  "data": {
+    "rooms": [
+      {"id":"kitchen","name":"厨房","icon":"🍳","polygon":"10,10 130,10 130,120 10,120","cabinets":[]},
+      {"id":"living","name":"客厅","icon":"🛋️","polygon":"140,10 290,10 290,160 140,160","cabinets":[
+        {"id":"top-cab","name":"顶柜","polygon":"150,20 220,20 220,80 150,80","zones":[
+          {"id":"top","name":"上层","items":[
+            {"id":"1","name":"碗架","position":"左","tags":["厨房用品","常用"],"qty":1,"qtyTotal":1},
+            {"id":"2","name":"帐篷","position":"右","tags":["户外"],"qty":1,"qtyTotal":1}
+          ]},
+          {"id":"mid","name":"中层","items":[
+            {"id":"3","name":"烘干机","position":"左","tags":["家电"],"qty":1,"qtyTotal":1},
+            {"id":"4","name":"蛇皮袋","position":"右","tags":["收纳"],"qty":2,"qtyTotal":4}
+          ]},
+          {"id":"bot","name":"下层","items":[
+            {"id":"5","name":"微波炉","position":"左","tags":["家电","常用"],"qty":1,"qtyTotal":1}
+          ]}
+        ]},
+        {"id":"side-cab","name":"侧柜","polygon":"230,20 280,20 280,80 230,80","zones":[
+          {"id":"all","name":"全层","items":[
+            {"id":"7","name":"奶瓶消毒器","position":"上","tags":["母婴"],"qty":1,"qtyTotal":1},
+            {"id":"8","name":"旋转置物架","position":"中","tags":["收纳"],"qty":1,"qtyTotal":1},
+            {"id":"9","name":"磁力置物架","position":"中","tags":["收纳"],"qty":1,"qtyTotal":1},
+            {"id":"10","name":"白色简易置物架","position":"下","tags":["收纳"],"qty":1,"qtyTotal":1},
+            {"id":"11","name":"猫包","position":"下","tags":["宠物","出行"],"qty":1,"qtyTotal":1}
+          ]}
+        ]}
+      ]},
+      {"id":"dining","name":"餐厅","icon":"🍽️","polygon":"300,10 390,10 390,120 300,120","cabinets":[]},
+      {"id":"bar","name":"水吧","icon":"☕","polygon":"300,130 390,130 390,200 300,200","cabinets":[]},
+      {"id":"study","name":"书房","icon":"📚","polygon":"10,130 130,130 130,220 10,220","cabinets":[]},
+      {"id":"kids","name":"儿童房","icon":"🧸","polygon":"10,230 130,230 130,290 10,290","cabinets":[]},
+      {"id":"bedroom","name":"主卧","icon":"🛏️","polygon":"140,170 290,170 290,290 140,290","cabinets":[]},
+      {"id":"bath1","name":"主卫","icon":"🚿","polygon":"300,210 390,210 390,250 300,250","cabinets":[]},
+      {"id":"bath2","name":"客卫","icon":"🛁","polygon":"300,260 390,260 390,290 300,290","cabinets":[]}
+    ]
+  },
+  "itemProps": {
+    "1":{"dateStored":"2025-08-01","expiry":null,"note":"白色陶瓷碗架，放筷子勺子"},
+    "2":{"dateStored":"2024-06-15","expiry":null,"note":"露营帐篷，4人款"},
+    "3":{"dateStored":"2025-11-20","expiry":null,"note":"小型烘干机"},
+    "4":{"dateStored":"2025-03-10","expiry":null,"note":"搬家时用的蛇皮袋"},
+    "5":{"dateStored":"2024-01-01","expiry":null,"note":"微波炉"},
+    "7":{"dateStored":"2024-09-01","expiry":null,"note":"小白熊奶瓶消毒器"},
+    "8":{"dateStored":"2025-05-20","expiry":null,"note":"可旋转，放调料瓶"},
+    "9":{"dateStored":"2025-07-01","expiry":null,"note":"磁吸式，放刀具"},
+    "10":{"dateStored":"2025-04-10","expiry":null,"note":"白色铁艺简易架"},
+    "11":{"dateStored":"2023-12-01","expiry":null,"note":"猫咪外出背包，太空舱款"}
+  }
+}
