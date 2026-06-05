@@ -1,3 +1,4 @@
 home-inventory.json
+backups/
 node_modules/
 *.log
