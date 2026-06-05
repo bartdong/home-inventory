@@ -201,6 +201,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
       <div class="dropdown-menu" id="sysDropdown">
         <div class="dropdown-item" onclick="exportData()">📤 导出</div>
         <div class="dropdown-item" onclick="importData()">📥 导入</div>
+        <div class="dropdown-item" onclick="showOpLog()">📋 操作记录</div>
       </div>
     </div>
   </div>
@@ -663,10 +664,11 @@ function renderDetail(){
   if(!currentCabinet&&room.cabinets.length>0){
     html+='<div style="margin-top:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">';
     room.cabinets.forEach(c=>{
-      const cnt=c.zones.reduce((n,z)=>n+z.items.length,0);
+      const types=c.zones.reduce((n,z)=>n+z.items.length,0);
+      const total=c.zones.reduce((n,z)=>n+z.items.reduce((s,i)=>s+(i.qty||1),0),0);
       html+=`<div class="cabinet-zone" onclick="selectCabinet('${c.id}')">
         <div class="zone-name">🗄️ ${c.name}</div>
-        <div style="font-size:13px;color:var(--text2)">${cnt} 种物品 · ${c.zones.length} 层</div>
+        <div style="font-size:13px;color:var(--text2)">${c.zones.length}层 · ${types}种物品 · 共${total}个</div>
         <div class="desktop-only" style="position:absolute;top:8px;right:8px;display:flex;gap:4px">
           <button class="icon-btn" onclick="event.stopPropagation();openEditCabinet('${c.id}')" title="编辑">✏️</button>
           <button class="icon-btn" onclick="event.stopPropagation();openAddZone('${c.id}')" title="添加位置">＋</button>
@@ -748,9 +750,83 @@ function openMapEditor(){
   mapSnapshot=JSON.parse(JSON.stringify(data));
   document.getElementById('mapEditorOverlay').classList.add('show');renderMapEditor()
 }
-function saveMapEditor(){mapSnapshot=null;document.getElementById('mapEditorOverlay').classList.remove('show');renderFloorPlan();renderRoomList();toast('户型图已保存')}
+function saveMapEditor(){
+  logOp('修改户型图');
+  mapSnapshot=null;
+  document.getElementById('mapEditorOverlay').classList.remove('show');
+  renderFloorPlan();renderRoomList();
+  // Save to file
+  const exportObj={data,itemProps};
+  fetch('home-inventory.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(exportObj,null,2)}).catch(()=>{});
+  toast('户型图已保存');
+}
 function cancelMapEditor(){if(mapSnapshot){data=mapSnapshot;mapSnapshot=null}document.getElementById('mapEditorOverlay').classList.remove('show');renderFloorPlan();renderRoomList()}
 let mapSnapshot=null;
+
+// ===== OPERATION LOG =====
+const OP_LOG_KEY='home-inventory-oplog';
+const OP_LOG_MAX=10;
+
+function loadOpLog(){
+  try{return JSON.parse(localStorage.getItem(OP_LOG_KEY)||'[]')}catch(e){return[]}
+}
+function saveOpLog(log){
+  localStorage.setItem(OP_LOG_KEY,JSON.stringify(log.slice(0,OP_LOG_MAX)));
+}
+function logOp(summary){
+  const log=loadOpLog();
+  log.unshift({time:Date.now(),summary,snapshot:JSON.stringify({data,itemProps})});
+  saveOpLog(log);
+}
+function rollbackOpLog(idx){
+  const log=loadOpLog();
+  const entry=log[idx];
+  if(!entry||!confirm(`回滚到「${entry.summary}」的操作前状态？`))return;
+  const snap=JSON.parse(entry.snapshot);
+  data=snap.data;itemProps=snap.itemProps;
+  // Remove this and all newer entries
+  saveOpLog(log.slice(idx+1));
+  renderFloorPlan();renderRoomList();renderDetail();
+  mobileHistory=[];
+  document.querySelector('.detail-panel')?.classList.remove('mobile-show');
+  document.getElementById('mobileBack')?.classList.remove('show');
+  toast('已回滚');
+}
+function showOpLog(){
+  const log=loadOpLog();
+  if(isMobile()){
+    mobilePush();
+    document.getElementById('mobileBack').classList.add('show');
+  }
+  renderOpLog(log);
+  if(isMobile())document.querySelector('.detail-panel').classList.add('mobile-show');
+  else document.getElementById('editModal').classList.add('show');
+}
+function renderOpLog(log){
+  const panel=isMobile()?document.getElementById('detailPanel'):document.querySelector('#editModal .modal');
+  let html=`<h3>📋 操作记录</h3>`;
+  if(log.length===0)html+=`<p style="color:var(--text2);margin:20px 0">暂无操作记录</p>`;
+  log.forEach((entry,i)=>{
+    const t=new Date(entry.time);
+    const timeStr=`${t.getMonth()+1}/${t.getDate()} ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+    html+=`<div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600">${entry.summary}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${timeStr}</div>
+      </div>
+      <button class="btn-cancel" onclick="rollbackOpLog(${i})" style="white-space:nowrap">回滚</button>
+    </div>`;
+  });
+  html+=`<div class="btn-row" style="margin-top:16px"><button class="btn-cancel" onclick="closeOpLog()">关闭</button></div>`;
+  panel.innerHTML=html;
+}
+function closeOpLog(){
+  if(isMobile()){
+    mobileGoBack();
+  }else{
+    document.getElementById('editModal').classList.remove('show');
+  }
+}
 
 function renderMapEditor(){
   const svg=document.getElementById('mapEditorSvg');
@@ -975,8 +1051,8 @@ function saveRoom(){
   const name=document.getElementById('editRoomName').value.trim();
   const icon=document.getElementById('editRoomIcon').value.trim()||'📦';
   if(!name)return alert('请输入房间名称');
-  if(id){const r=data.rooms.find(r=>r.id===id);if(r){r.name=name;r.icon=icon}}
-  else{data.rooms.push({id:'room_'+uid(),name,icon,polygon:'150,10 250,10 250,80 150,80',cabinets:[]})}
+  if(id){const r=data.rooms.find(r=>r.id===id);if(r){logOp(`修改房间「${r.name}」→「${name}」`);r.name=name;r.icon=icon}}
+  else{data.rooms.push({id:'room_'+uid(),name,icon,polygon:'150,10 250,10 250,80 150,80',cabinets:[]});logOp(`添加房间「${name}」`)}
   closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast(id?'已更新':'已添加');
 }
 function deleteRoom(){
@@ -984,6 +1060,7 @@ function deleteRoom(){
   if(!id)return;
   const room=data.rooms.find(r=>r.id===id);
   if(room&&countItems(room)>0&&!confirm(`「${room.name}」里有物品，确定删除？`))return;
+  if(room)logOp(`删除房间「${room.name}」`);
   data.rooms=data.rooms.filter(r=>r.id!==id);
   if(currentRoom===id){currentRoom=null;currentCabinet=null;currentZone=null}
   closeRoomModal();renderMapEditor();renderFloorPlan();renderRoomList();renderDetail();toast('已删除');
@@ -1052,19 +1129,26 @@ function saveStruct(){
     const r=data.rooms.find(r=>r.id===id);if(r){
       const cab={id:'cab_'+uid(),name,zones:zones.map(z=>({id:'zone_'+uid(),name:z,items:[]}))};
       r.cabinets.push(cab);currentCabinet=cab.id;
+      logOp(`在「${r.name}」添加柜子「${name}」`);
     }
   }else if(type==='edit-cabinet'){
     for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
-      c.name=name;
+      const oldName=c.name;c.name=name;
       const zn=document.getElementById('structZones').value.split(',').map(s=>s.trim()).filter(Boolean);
       if(zn.length>0){const ex=new Map(c.zones.map(z=>[z.name,z]));c.zones=zn.map(n=>ex.get(n)||{id:'zone_'+uid(),name:n,items:[]})}
-      break;
+      logOp(`修改柜子「${oldName}」→「${name}」`);break;
     }}
   }else if(type==='zone'){
-    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){c.zones.push({id:'zone_'+uid(),name,items:[]});break}}
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
+      c.zones.push({id:'zone_'+uid(),name,items:[]});
+      logOp(`在「${c.name}」添加位置「${name}」`);break;
+    }}
   }else if(type==='edit-zone'){
     const ids=JSON.parse(id);
-    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===ids.cabId);if(c){const z=c.zones.find(z=>z.id===ids.zoneId);if(z){z.name=name;break}}}
+    for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===ids.cabId);if(c){const z=c.zones.find(z=>z.id===ids.zoneId);if(z){
+      const oldName=z.name;z.name=name;
+      logOp(`修改位置「${oldName}」→「${name}」`);break;
+    }}}
   }
   closeStructModal();renderDetail();toast('已保存');
 }
@@ -1075,13 +1159,13 @@ function deleteStruct(){
     for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===id);if(c){
       const total=c.zones.reduce((n,z)=>n+z.items.length,0);
       if(total>0){cabDeleteTarget={room:r,cabinet:c,type:'cabinet'};showCabDelete(c.name,total);return}
-      r.cabinets=r.cabinets.filter(x=>x.id!==id);closeStructModal();renderDetail();toast('已删除');return;
+      logOp(`删除柜子「${c.name}」`);r.cabinets=r.cabinets.filter(x=>x.id!==id);closeStructModal();renderDetail();toast('已删除');return;
     }}
   }else if(type==='edit-zone'){
     const ids=JSON.parse(id);
     for(const r of data.rooms){const c=r.cabinets.find(c=>c.id===ids.cabId);if(c){const z=c.zones.find(z=>z.id===ids.zoneId);if(z){
       if(z.items.length>0){cabDeleteTarget={room:r,cabinet:c,zone:z,type:'zone'};showCabDelete(z.name,z.items.length);return}
-      c.zones=c.zones.filter(x=>x.id!==ids.zoneId);closeStructModal();renderDetail();toast('已删除');return;
+      logOp(`删除位置「${z.name}」`);c.zones=c.zones.filter(x=>x.id!==ids.zoneId);closeStructModal();renderDetail();toast('已删除');return;
     }}}
   }
 }
@@ -1107,8 +1191,8 @@ function cabDeleteMove(){
 function cabDeleteForce(){
   if(!cabDeleteTarget)return;
   const{room,cabinet,zone,type}=cabDeleteTarget;
-  if(type==='zone'&&zone){cabinet.zones=cabinet.zones.filter(z=>z.id!==zone.id)}
-  else{room.cabinets=room.cabinets.filter(c=>c.id!==cabinet.id)}
+  if(type==='zone'&&zone){logOp(`强制删除位置「${zone.name}」及物品`);cabinet.zones=cabinet.zones.filter(z=>z.id!==zone.id)}
+  else{logOp(`强制删除柜子「${cabinet.name}」及物品`);room.cabinets=room.cabinets.filter(c=>c.id!==cabinet.id)}
   closeCabDelete();closeStructModal();renderDetail();toast('已删除');
 }
 let pendingCabDelete=null;
@@ -1208,6 +1292,7 @@ function saveItem(){
     }
     const item=findItemById(id);if(item){item.name=name;item.position=pos;item.tags=tags;item.qty=qty;item.qtyTotal=qtyTotal}
     itemProps[id]={dateStored:date,expiry:expiry||null,note};
+    logOp(`修改物品「${name}」`);
   }else{
     const newId='item_'+uid();
     let tz=null;
@@ -1222,6 +1307,7 @@ function saveItem(){
     if(!tz){alert('请先选择一个位置');return}
     tz.items.push({id:newId,name,position:pos,tags,qty,qtyTotal});
     itemProps[newId]={dateStored:date,expiry:expiry||null,note};
+    logOp(`添加物品「${name}」`);
   }
   closeModal();renderDetail();toast(id?'已更新':'已添加');
 }
@@ -1231,7 +1317,7 @@ function deleteItem(){
   if(!id||!confirm('确定删除此物品？'))return;
   for(const r of data.rooms)for(const c of r.cabinets)for(const z of c.zones){
     const idx=z.items.findIndex(i=>i.id===id);
-    if(idx>=0){z.items.splice(idx,1);delete itemProps[id];closeModal();renderDetail();toast('已删除');return}
+    if(idx>=0){const item=z.items[idx];logOp(`删除物品「${item.name}」`);z.items.splice(idx,1);delete itemProps[id];closeModal();renderDetail();toast('已删除');return}
   }
 }
 
@@ -1290,7 +1376,10 @@ function confirmMove(){
   if(room)for(const c of room.cabinets)if(c.id===cabId)for(const z of c.zones)if(z.id===zoneId){
     z.items.push(...moved);
   }
-  closeMove();toast(`已移动 ${moved.length} 件物品`);
+  closeMove();
+  const names=moved.map(i=>i.name).join('、');
+  logOp(`移动 ${moved.length} 件物品（${names}）`);
+  toast(`已移动 ${moved.length} 件物品`);
   currentRoom=loc;currentCabinet=cabId;currentZone=zoneId;
   exitBatch();renderFloorPlan();renderRoomList();renderDetail();
 }
