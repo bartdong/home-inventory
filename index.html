@@ -163,6 +163,9 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 .map-editor-sidebar .room-list-item .del{margin-left:auto;background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px}
 .map-editor-sidebar .room-list-item .del:hover{color:var(--red);background:rgba(248,113,113,.1)}
 
+.mobile-back{display:none}
+.mobile-back.show{display:inline-flex}
+
 /* Mobile */
 @media(max-width:768px){
   .main{flex-direction:column}
@@ -170,8 +173,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
   .floor-plan-container{padding:10px}
   .detail-panel{display:none}
   .detail-panel.mobile-show{display:flex;position:fixed;top:48px;left:0;right:0;bottom:0;z-index:60;background:var(--bg);padding:12px;overflow-y:auto}
-  .mobile-back{display:none}
-  .mobile-back.show{display:inline-flex}
+
   .item-props{grid-template-columns:1fr}
   .topbar-btn,.toolbar-btn,.btn-action,.btn-ok,.btn-cancel,.btn-del,.btn-move,.map-editor-btn{padding:6px 10px;font-size:12px}
   .topbar{padding:8px 12px;gap:8px}
