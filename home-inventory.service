@@ -1,0 +1,18 @@
+[Unit]
+Description=Home Inventory API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=<your-deploy-path>
+ExecStart=/usr/bin/python3 server.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=home-inventory
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

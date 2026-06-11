@@ -23,6 +23,8 @@ home-inventory/
 ├── home-inventory.json         # 实际数据（gitignore）
 ├── home-inventory.example.json # 示例数据
 ├── backups/                    # 操作备份（gitignore，最多 10 个）
+├── nginx-home.conf             # nginx 配置模板（/home 路径）
+├── home-inventory.service      # systemd 服务文件
 ├── .gitignore
 └── README.md
 ```
@@ -30,14 +32,20 @@ home-inventory/
 ## 启动
 
 ```bash
-# 启动服务器（支持备份 API）
+# 启动服务器（支持备份 API，默认端口 3002）
 python3 server.py
-
-# 或用普通 HTTP 服务器（仅浏览，不支持备份）
-python3 -m http.server 80
 ```
 
-访问 `http://localhost` 即可。
+访问 `http://localhost:3002` 即可。
+
+## 部署
+
+1. 将项目文件上传到服务器 `/var/www/html/home-inventory/`
+2. 参考 `nginx-home.conf` 将 `/home/` location 合并到服务器 nginx 配置
+3. 参考 `home-inventory.service` 注册 systemd 服务
+4. 重启 nginx 并启动服务
+
+> **注意**：nginx-home.conf 中的域名需替换为实际域名
 
 ## 数据格式
 
