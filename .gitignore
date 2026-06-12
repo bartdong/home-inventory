@@ -2,3 +2,10 @@ home-inventory.json
 backups/
 node_modules/
 *.log
+.venv/
+__pycache__/
+
+# AI 内部设计文档（不入仓库）
+.ai/
+.env
+*.db
