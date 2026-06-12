@@ -8,6 +8,12 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--text:#e2e8f0;--text2:#94a3b8;--accent:#38bdf8;--accent2:#818cf8;--green:#4ade80;--orange:#fb923c;--red:#f87171;--yellow:#fbbf24;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3)}
 body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+.login-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:24px;text-align:center;padding:40px}
+.login-prompt h1{font-size:24px;color:var(--accent)}
+.login-prompt p{color:var(--text2);font-size:15px;line-height:1.6;max-width:400px}
+.login-prompt .hint{background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:20px 28px;font-size:14px;color:var(--text2);line-height:1.8}
+.login-prompt .hint strong{color:var(--text)}
+.login-prompt .logo{font-size:48px}
 .app{display:flex;flex-direction:column;height:100vh}
 .topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--surface2);flex-wrap:wrap}
 .search-box{flex:1;min-width:120px;position:relative}
@@ -201,6 +207,8 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
     <div class="dropdown" style="position:relative">
       <button class="topbar-btn" onclick="toggleDropdown(event)" id="sysBtn">⚙️</button>
       <div class="dropdown-menu" id="sysDropdown">
+        <div class="dropdown-item" id="userInfo" style="cursor:default;opacity:0.7"></div>
+        <div class="dropdown-item" onclick="doLogout()">🚪 退出登录</div>
         <div class="dropdown-item" onclick="exportData()">📤 导出</div>
         <div class="dropdown-item" onclick="importData()">📥 导入</div>
         <div class="dropdown-item" onclick="showOpLog()">📋 操作记录</div>
@@ -351,8 +359,28 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 let data={rooms:[]};
 let itemProps={};
 
-// Load data from JSON file
+// Check auth, then load data
 (async function(){
+  try{
+    const authResp=await fetch('/home/auth/check');
+    const auth=await authResp.json();
+    if(!auth.logged_in){
+      document.querySelector('.app').innerHTML='
+        <div class="login-prompt">
+          <div class="logo">🏠</div>
+          <h1>家庭收纳</h1>
+          <p>请先登录后再使用</p>
+          <div class="hint">
+            <strong>如何登录？</strong><br>
+            微信联系 <strong>小柔</strong>，发送「我要登录收纳」<br>
+            小柔会发给你一个专属登录链接<br>
+            点击链接即可自动登录（30天内免重复登录）
+          </div>
+        </div>';
+      return;
+    }
+    window.__currentUser=auth.user;
+  }catch(e){console.warn('Auth check failed, proceeding without auth',e)}
   try{
     const resp=await fetch('home-inventory.json?_='+Date.now());
     if(resp.ok){
@@ -1451,6 +1479,16 @@ function importData(){
 }
 
 // ===== INIT =====
+// Show user info if logged in
+if(window.__currentUser){
+  const u=window.__currentUser;
+  const roleMap={admin:'管理员',member:'成员',user:'访客'};
+  document.getElementById('userInfo').textContent=u.nickname+' ('+(roleMap[u.role]||u.role)+')';
+}
+async function doLogout(){
+  try{await fetch('/home/auth/logout',{method:'POST'})}catch(e){}
+  location.reload();
+}
 // Data loaded from home-inventory.json via async IIFE above
 </script>
 </body>
