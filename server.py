@@ -407,9 +407,8 @@ def rollback():
 
 # ── 页面路由 ────────────────────────────────────────
 @app.route('/home/')
-@require_login
 def index_page():
-    """主页（需登录）"""
+    """主页（前端自行检查登录态）"""
     return send_from_directory('.', 'index.html')
 
 
