@@ -68,7 +68,8 @@ def init_db():
         openid TEXT NOT NULL,
         created_at TEXT DEFAULT (datetime('now', 'localtime')),
         expires_at TEXT NOT NULL,
-        used INTEGER DEFAULT 0
+        used INTEGER DEFAULT 0,
+        session_id TEXT
     )''')
 
     # 会话表

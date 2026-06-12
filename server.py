@@ -14,7 +14,7 @@ from flask import Flask, request, jsonify, redirect, send_from_directory
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 'data.db')
 ADMIN_KEY = os.environ.get('ADMIN_KEY', '')
 SESSION_SECRET = os.environ.get('SESSION_SECRET', secrets.token_hex(32))
-SESSION_LIFETIME_DAYS = int(os.environ.get('SESSION_LIFETIME_DAYS', '30'))
+SESSION_LIFETIME_MINUTES = int(os.environ.get('SESSION_LIFETIME_MINUTES', '30'))  # 滑动窗口，有操作续期
 MAGIC_LINK_EXPIRE_MINUTES = int(os.environ.get('MAGIC_LINK_EXPIRE_MINUTES', '5'))
 BACKEND_PORT = int(os.environ.get('BACKEND_PORT', '3002'))
 
@@ -56,7 +56,6 @@ def dict_rows(rows):
 
 
 # ── 认证中间件 ────────────────────────────────────────
-SESSION_INACTIVITY_MINUTES = 5
 
 def get_current_user():
     """从 session cookie 获取当前用户（5分钟不操作自动过期）"""
@@ -82,16 +81,17 @@ def get_current_user():
             db.commit()
             return None
 
-        # 不活跃超时检查（5分钟没操作就过期）
+        # 不活跃超时检查（30分钟滑动窗口）
         last_active = datetime.strptime(row['last_active'], '%Y-%m-%d %H:%M:%S')
-        if (datetime.now() - last_active).total_seconds() > SESSION_INACTIVITY_MINUTES * 60:
+        if (datetime.now() - last_active).total_seconds() > SESSION_LIFETIME_MINUTES * 60:
             db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
             db.commit()
             return None
 
-        # 更新 last_active
+        # 滑动窗口：更新 last_active 并续期 expires_at
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        db.execute("UPDATE sessions SET last_active = ? WHERE session_id = ?", (now, session_id))
+        new_expires = (datetime.now() + timedelta(minutes=SESSION_LIFETIME_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
+        db.execute("UPDATE sessions SET last_active = ?, expires_at = ? WHERE session_id = ?", (now, new_expires, session_id))
         db.commit()
 
         return dict_row(row)
@@ -154,9 +154,9 @@ def require_admin_key(f):
 
 
 def create_session(db, user_id):
-    """创建 session，返回 session_id"""
+    """创建 session，返回 session_id（30 分钟滑动窗口）"""
     session_id = secrets.token_hex(32)
-    expires_at = (datetime.now() + timedelta(days=SESSION_LIFETIME_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+    expires_at = (datetime.now() + timedelta(minutes=SESSION_LIFETIME_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     db.execute(
         "INSERT INTO sessions (session_id, user_id, expires_at, last_active) VALUES (?, ?, ?, ?)",
@@ -253,7 +253,7 @@ def generate_magic_link():
 # ── 认证路由 ──────────────────────────────────────────
 @app.route('/home/auth/magic-login')
 def magic_login():
-    """Magic Link 登录验证"""
+    """Magic Link 登录验证（5 分钟内可多次登录，共享同一 session）"""
     token = request.args.get('token', '')
     if not token:
         return jsonify({'error': 'token required'}), 400
@@ -268,13 +268,9 @@ def magic_login():
         if not row:
             return redirect('/')
 
-        # 检查过期
+        # 检查 token 过期（5 分钟窗口）
         expires_at = datetime.strptime(row['expires_at'], '%Y-%m-%d %H:%M:%S')
         if datetime.now() > expires_at:
-            return redirect('/')
-
-        # 检查是否已使用
-        if row['used']:
             return redirect('/')
 
         # 查找用户
@@ -282,11 +278,28 @@ def magic_login():
         if not user:
             return redirect('/')
 
-        # 标记 token 已使用
-        db.execute("UPDATE magic_tokens SET used = 1 WHERE id = ?", (row['id'],))
-
-        # 创建 session
-        session_id, _ = create_session(db, user['id'])
+        # 已有 session → 直接复用（多端共享）
+        if row['session_id']:
+            session_id = row['session_id']
+            # 验证 session 是否还有效
+            sess = db.execute("SELECT expires_at FROM sessions WHERE session_id = ?", (session_id,)).fetchone()
+            if sess:
+                sess_exp = datetime.strptime(sess['expires_at'], '%Y-%m-%d %H:%M:%S')
+                if datetime.now() > sess_exp:
+                    # session 过期，创建新的
+                    session_id, _ = create_session(db, user['id'])
+                    db.execute("UPDATE magic_tokens SET session_id = ? WHERE id = ?", (session_id, row['id']))
+                    db.commit()
+            else:
+                # session 不存在，创建新的
+                session_id, _ = create_session(db, user['id'])
+                db.execute("UPDATE magic_tokens SET session_id = ? WHERE id = ?", (session_id, row['id']))
+                db.commit()
+        else:
+            # 首次点击，创建 session 并关联
+            session_id, _ = create_session(db, user['id'])
+            db.execute("UPDATE magic_tokens SET session_id = ? WHERE id = ?", (session_id, row['id']))
+            db.commit()
 
         # 更新最后登录时间
         db.execute(
@@ -297,23 +310,23 @@ def magic_login():
 
         resp = redirect('/home/')
         resp.set_cookie('session_id', session_id, httponly=True, samesite='Lax',
-                        max_age=SESSION_LIFETIME_DAYS * 86400)
+                        max_age=SESSION_LIFETIME_MINUTES * 60)
         return resp
     finally:
         db.close()
 
 
 def cleanup_expired():
-    """清理过期 session 和 token，同一用户只保留最新 session"""
+    """清理过期 token 和 session"""
     db = get_db()
     try:
+        # 删除过期 token
         db.execute("DELETE FROM magic_tokens WHERE expires_at < datetime('now','localtime')")
+        # 删除过期 session
+        db.execute("DELETE FROM sessions WHERE expires_at < datetime('now','localtime')")
+        # 删除孤立 session（token 已删但 session 还在）
         db.execute("""DELETE FROM sessions WHERE session_id NOT IN (
-            SELECT session_id FROM (
-                SELECT session_id, user_id,
-                       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
-                FROM sessions
-            ) WHERE rn = 1
+            SELECT DISTINCT session_id FROM magic_tokens WHERE session_id IS NOT NULL
         )""")
         db.commit()
     finally:
