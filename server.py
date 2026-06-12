@@ -297,9 +297,27 @@ def magic_login():
         db.close()
 
 
+def cleanup_expired():
+    """清理过期 session 和 token，同一用户只保留最新 session"""
+    db = get_db()
+    try:
+        db.execute("DELETE FROM magic_tokens WHERE expires_at < datetime('now','localtime')")
+        db.execute("""DELETE FROM sessions WHERE session_id NOT IN (
+            SELECT session_id FROM (
+                SELECT session_id, user_id,
+                       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
+                FROM sessions
+            ) WHERE rn = 1
+        )""")
+        db.commit()
+    finally:
+        db.close()
+
+
 @app.route('/home/auth/check')
 def auth_check():
     """检查登录状态"""
+    cleanup_expired()
     user = get_current_user()
     if user:
         return jsonify({
