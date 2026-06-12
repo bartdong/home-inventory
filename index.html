@@ -8,6 +8,14 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0f172a;--surface:#1e293b;--surface2:#334155;--text:#e2e8f0;--text2:#94a3b8;--accent:#38bdf8;--accent2:#818cf8;--green:#4ade80;--orange:#fb923c;--red:#f87171;--yellow:#fbbf24;--radius:12px;--shadow:0 4px 24px rgba(0,0,0,.3)}
 body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+.session-warning{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center}
+.session-warning.show{display:flex}
+.session-warning-box{background:var(--surface);border:1px solid var(--surface2);border-radius:var(--radius);padding:32px;text-align:center;max-width:360px;box-shadow:var(--shadow)}
+.session-warning-box h3{font-size:18px;margin-bottom:12px;color:var(--yellow)}
+.session-warning-box p{color:var(--text2);font-size:14px;margin-bottom:20px;line-height:1.6}
+.session-warning-box .countdown{font-size:36px;font-weight:700;color:var(--red);margin-bottom:20px;font-variant-numeric:tabular-nums}
+.session-warning-box .btn-continue{padding:10px 32px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}
+.session-warning-box .btn-continue:hover{filter:brightness(1.1)}
 .app{display:flex;flex-direction:column;height:100vh}
 .topbar{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--surface2);flex-wrap:wrap}
 .search-box{flex:1;min-width:120px;position:relative}
@@ -194,6 +202,13 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 </head>
 <body>
 <div class="app">
+  <div class="session-warning" id="sessionWarning">
+    <div class="session-warning-box">
+      <h3>⏰ 快要锁门了</h3>
+      <p>还有 <span id="warningCountdown">30</span> 秒后自动退出<br>是否继续整理？</p>
+      <button class="btn-continue" onclick="extendSession()">继续整理</button>
+    </div>
+  </div>
   <div class="topbar">
     <button class="topbar-btn mobile-back" id="mobileBack" onclick="mobileGoBack()">← 返回</button>
     <div class="search-box"><span class="icon">🔍</span><input type="text" id="searchInput" placeholder="搜索物品..."/><button class="search-btn" id="searchBtn" onclick="doSearch()" style="display:none">搜索</button></div>
@@ -1450,7 +1465,69 @@ function importData(){
   };input.click();
 }
 
+// ===== SESSION EXPIRY WARNING =====
+let sessionExpiryTimer=null,sessionCountdownTimer=null,sessionExpiresAt=null;
+
+function startSessionTimer(expiresAtStr){
+  clearSessionTimers();
+  if(!expiresAtStr)return;
+  sessionExpiresAt=new Date(expiresAtStr.replace(' ','T')).getTime();
+  const now=Date.now();
+  const msUntilWarning=sessionExpiresAt-now-30000; // 到期前30秒弹窗
+  if(msUntilWarning>0){
+    sessionExpiryTimer=setTimeout(showSessionWarning,msUntilWarning);
+  }else if(sessionExpiresAt-now>0){
+    // 已经过了29分30秒，直接弹窗
+    showSessionWarning();
+  }
+}
+
+function clearSessionTimers(){
+  if(sessionExpiryTimer){clearTimeout(sessionExpiryTimer);sessionExpiryTimer=null}
+  if(sessionCountdownTimer){clearInterval(sessionCountdownTimer);sessionCountdownTimer=null}
+}
+
+function showSessionWarning(){
+  document.getElementById('sessionWarning').classList.add('show');
+  let remaining=30;
+  document.getElementById('warningCountdown').textContent=remaining;
+  sessionCountdownTimer=setInterval(()=>{
+    remaining--;
+    document.getElementById('warningCountdown').textContent=remaining;
+    if(remaining<=0){
+      clearSessionTimers();
+      window.location.href='/';
+    }
+  },1000);
+}
+
+async function extendSession(){
+  clearSessionTimers();
+  document.getElementById('sessionWarning').classList.remove('show');
+  try{
+    const resp=await fetch('/home/auth/check');
+    const data=await resp.json();
+    if(data.logged_in&&data.expires_at){
+      startSessionTimer(data.expires_at);
+    }else{
+      window.location.href='/';
+    }
+  }catch(e){
+    window.location.href='/';
+  }
+}
+
 // ===== INIT =====
+// Auth check and session timer
+(async function(){
+  try{
+    const resp=await fetch('/home/auth/check');
+    const data=await resp.json();
+    if(data.logged_in&&data.expires_at){
+      startSessionTimer(data.expires_at);
+    }
+  }catch(e){}
+})();
 // Data loaded from home-inventory.json via async IIFE above
 </script>
 </body>

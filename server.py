@@ -346,7 +346,8 @@ def auth_check():
                 'openid': user['openid'],
                 'nickname': user['nickname'],
                 'role': user['role']
-            }
+            },
+            'expires_at': user['expires_at']
         })
     return jsonify({'logged_in': False})
 
