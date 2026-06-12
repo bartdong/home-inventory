@@ -273,11 +273,17 @@ def magic_login():
         if datetime.now() > expires_at:
             return redirect('/')
 
+        # 检查是否已使用
+        if row['used']:
+            return redirect('/')
 
         # 查找用户
         user = db.execute("SELECT * FROM users WHERE openid = ?", (row['openid'],)).fetchone()
         if not user:
             return redirect('/')
+
+        # 标记 token 已使用
+        db.execute("UPDATE magic_tokens SET used = 1 WHERE id = ?", (row['id'],))
 
         # 创建 session
         session_id, _ = create_session(db, user['id'])
