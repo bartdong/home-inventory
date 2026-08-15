@@ -78,8 +78,13 @@ def init_db():
         user_id INTEGER REFERENCES users(id),
         data TEXT,
         expires_at TEXT NOT NULL,
+        last_active TEXT,
         created_at TEXT DEFAULT (datetime('now', 'localtime'))
     )''')
+    # 兼容旧库：补充 last_active 字段
+    cols = [r[1] for r in c.execute("PRAGMA table_info(sessions)").fetchall()]
+    if 'last_active' not in cols:
+        c.execute("ALTER TABLE sessions ADD COLUMN last_active TEXT")
 
     conn.commit()
     conn.close()

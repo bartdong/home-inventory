@@ -194,6 +194,18 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 @media(min-width:769px){
   .mobile-only{display:none!important}
 }
+/* 2D/3D view toggle */
+.view-toggle-group{display:flex;gap:4px}
+.view-toggle{padding:3px 10px;border:1px solid var(--surface2);border-radius:6px;background:var(--surface);color:var(--text2);cursor:pointer;font-size:11px;font-weight:700;transition:all .2s}
+.view-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.view-toggle.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+/* 3D isometric cabinet view */
+.iso-face{stroke-width:.6;cursor:pointer;transition:opacity .15s}
+.iso-face:hover{opacity:.85}
+.iso-label{fill:#e2e8f0;font-weight:600;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
+.status-legend{display:flex;gap:10px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+.lg-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2)}
+.lg-dot{width:10px;height:10px;border-radius:3px}
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--surface2);border-radius:3px}
@@ -219,15 +231,25 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
         <div class="dropdown-item" onclick="exportData()">📤 导出</div>
         <div class="dropdown-item" onclick="importData()">📥 导入</div>
         <div class="dropdown-item" onclick="showOpLog()">📋 操作记录</div>
+        <div class="dropdown-item" onclick="logout()">🚪 退出登录</div>
       </div>
     </div>
   </div>
   <div class="main">
     <div class="floor-panel">
       <div class="floor-plan-container">
-        <h3>🏠 户型图</h3>
-        <div class="floor-plan">
+        <h3>🏠 户型图
+          <span class="view-toggle-group" style="margin-left:auto">
+            <button class="view-toggle active" id="viewToggle2d" data-view="2d" onclick="setView('2d')">2D</button>
+            <button class="view-toggle" id="viewToggle3d" data-view="3d" onclick="setView('3d')">3D</button>
+          </span>
+        </h3>
+        <div class="floor-plan" id="floorPlan2d">
           <svg id="floorPlanSvg" viewBox="0 0 400 300"></svg>
+        </div>
+        <div class="floor-plan" id="floorPlan3d" style="display:none">
+          <svg id="floorPlanSvg3d" viewBox="0 0 400 300"></svg>
+          <div class="status-legend" id="statusLegend"></div>
         </div>
       </div>
       <div class="room-list" id="roomList"></div>
@@ -384,6 +406,7 @@ let searchQuery='',highlightedItems=new Set(),searchMatches=[];
 let batchMode=false,batchSelected=new Set();
 let mapDragState=null;
 let cabDeleteTarget=null;
+let currentView='2d'; // '2d' | '3d'
 
 // ===== HELPERS =====
 function uid(){return '_'+Math.random().toString(36).slice(2,9)}
@@ -407,8 +430,132 @@ function polygonCenter(pts){return{x:pts.reduce((s,p)=>s+p[0],0)/pts.length,y:pt
 function polygonBBox(pts){return{minX:Math.min(...pts.map(p=>p[0])),maxX:Math.max(...pts.map(p=>p[0])),minY:Math.min(...pts.map(p=>p[1])),maxY:Math.max(...pts.map(p=>p[1]))}}
 function svgPoint(svg,e){const r=svg.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*400,y:(e.clientY-r.top)/r.height*300}}
 
+// ===== 3D ISOMETRIC VIEW =====
+const ISO={KX:0.86,KY:0.5,KH:1.0};
+const STATUS={
+  empty:{label:'空',color:'#1e293b'},
+  low:{label:'少量',color:'#155e75'},
+  half:{label:'半满',color:'#06b6d4'},
+  high:{label:'较满',color:'#22d3ee'},
+  full:{label:'已满',color:'#f59e0b'}
+};
+function zoneFill(zone){
+  let qty=0,total=0;
+  (zone.items||[]).forEach(i=>{qty+=i.qty||0;total+=i.qtyTotal||0});
+  return{qty,total};
+}
+function zoneStatus(zone){
+  const f=zoneFill(zone);
+  if(f.total<=0)return'empty';
+  const r=f.qty/f.total;
+  if(r<=0)return'empty';
+  if(r<0.34)return'low';
+  if(r<0.67)return'half';
+  if(r<1)return'high';
+  return'full';
+}
+function isoPoint(p,h,ox,oy){return[ox+(p[0]-p[1])*ISO.KX,oy+(p[0]+p[1])*ISO.KY-h*ISO.KH]}
+function shade(hex,f){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,Math.round((n>>16&255)*f));
+  const g=Math.min(255,Math.round((n>>8&255)*f));
+  const b=Math.min(255,Math.round((n&255)*f));
+  return'#'+((1<<24|r<<16|g<<8|b).toString(16).slice(1));
+}
+function setView(v){
+  currentView=v;
+  document.getElementById('viewToggle2d').classList.toggle('active',v==='2d');
+  document.getElementById('viewToggle3d').classList.toggle('active',v==='3d');
+  document.getElementById('floorPlan2d').style.display=v==='2d'?'block':'none';
+  document.getElementById('floorPlan3d').style.display=v==='3d'?'block':'none';
+  renderFloorPlan();
+}
+function renderLegend(){
+  const el=document.getElementById('statusLegend');
+  el.innerHTML=Object.keys(STATUS).map(k=>`<div class="lg-item"><span class="lg-dot" style="background:${STATUS[k].color}"></span>${STATUS[k].label}</div>`).join('');
+}
+function render3D(){
+  const svg=document.getElementById('floorPlanSvg3d');
+  let room=data.rooms.find(r=>r.id===currentRoom&&r.cabinets.length>0)
+        ||data.rooms.find(r=>r.cabinets.length>0)
+        ||(currentRoom?data.rooms.find(r=>r.id===currentRoom):null)
+        ||data.rooms[0];
+  if(!room){svg.innerHTML='';renderLegend();return}
+  const ox=0,oy=0,H=50;
+  const allPts=[],faces=[],labels=[];
+
+  // 房间地面板
+  const rpts=parsePolygon(room.polygon);
+  const rbot=rpts.map(p=>isoPoint(p,0,ox,oy));
+  allPts.push(...rbot);
+  faces.push({poly:rbot,fill:'#13203b',stroke:'#243358',sw:1});
+  const rc=polygonCenter(rpts);
+  const rlp=isoPoint([rc.x,rc.y],0,ox,oy);
+  labels.push({text:`${room.icon} ${room.name}`,x:rlp[0],y:rlp[1],fs:12});
+
+  // 柜子 → 等距 3D 盒（按分区层叠加、按填充状态着色）
+  room.cabinets.forEach(cab=>{
+    if(!cab.polygon)return;
+    const pts=parsePolygon(cab.polygon);
+    if(pts.length<4)return;
+    const n=(cab.zones&&cab.zones.length)||0;
+    if(n===0)return;
+    const seg=H/n;
+    cab.zones.forEach((z,zi)=>{
+      const rev=n-1-zi; // 数据里 zones 是顶→底（上层…下层），3D 需自下而上堆叠
+      const h0=rev*seg,h1=(rev+1)*seg;
+      const st=STATUS[zoneStatus(z)]||STATUS.empty;
+      const bot=pts.map(p=>isoPoint(p,h0,ox,oy));
+      const top=pts.map(p=>isoPoint(p,h1,ox,oy));
+      allPts.push(...bot,...top);
+      const attr={room:room.id,cab:cab.id,zone:z.id};
+      faces.push({poly:[bot[3],bot[2],top[2],top[3]],fill:shade(st.color,0.72),stroke:'#06121f',sw:.6,...attr});
+      faces.push({poly:[bot[1],bot[2],top[2],top[1]],fill:shade(st.color,0.55),stroke:'#06121f',sw:.6,...attr});
+      faces.push({poly:[top[0],top[1],top[2],top[3]],fill:st.color,stroke:'rgba(255,255,255,0.12)',sw:.6,...attr});
+      const f=zoneFill(z);
+      const lx=(pts[0][0]+pts[1][0])/2, ly=pts[3][1];
+      const lfp=isoPoint([lx,ly],(h0+h1)/2,ox,oy);
+      labels.push({text:f.total>0?`${z.name} ${f.qty}/${f.total}`:z.name,x:lfp[0],y:lfp[1],fs:9});
+    });
+    const cc=polygonCenter(pts);
+    const clp=isoPoint([cc.x,cc.y],H,ox,oy);
+    labels.push({text:cab.name,x:clp[0],y:clp[1]-8,fs:11});
+  });
+
+  // 自适应 viewBox
+  const xs=allPts.map(p=>p[0]),ys=allPts.map(p=>p[1]);
+  const pad=16;
+  const minX=Math.min(...xs)-pad,minY=Math.min(...ys)-pad;
+  const maxX=Math.max(...xs)+pad,maxY=Math.max(...ys)+pad;
+  const vbW=maxX-minX,vbH=maxY-minY;
+  svg.setAttribute('viewBox',`${minX} ${minY} ${vbW} ${vbH}`);
+
+  let html=`<rect x="${minX}" y="${minY}" width="${vbW}" height="${vbH}" fill="#0f172a"/>`;
+  faces.forEach(f=>{
+    const ptsStr=f.poly.map(p=>`${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    const cls=f.room?'iso-face':'';
+    const d=f.room?`data-room="${f.room}" data-cab="${f.cab}" data-zone="${f.zone}"`:'';
+    html+=`<polygon class="${cls}" ${d} points="${ptsStr}" fill="${f.fill}" stroke="${f.stroke}" stroke-width="${f.sw}"/>`;
+  });
+  labels.forEach(l=>{
+    html+=`<text class="iso-label" x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" font-size="${l.fs}">${l.text}</text>`;
+  });
+  svg.innerHTML=html;
+  svg.querySelectorAll('.iso-face').forEach(el=>el.addEventListener('click',e=>{
+    e.stopPropagation();
+    const r=el.dataset.room,c=el.dataset.cab,z=el.dataset.zone;
+    currentRoom=r;currentCabinet=c;
+    if(z){currentZone=z;currentItem=null}
+    if(isMobile()){mobilePush();renderDetail();mobileShowDetail()}
+    else renderDetail();
+    renderFloorPlan();renderRoomList();
+  }));
+  renderLegend();
+}
+
 // ===== RENDER FLOOR PLAN =====
 function renderFloorPlan(){
+  if(currentView==='3d'){render3D();return}
   const svg=document.getElementById('floorPlanSvg');
   let html='<rect x="0" y="0" width="400" height="300" fill="#0f172a" rx="8"/>';
   // Render rooms
@@ -621,6 +768,9 @@ function toggleDropdown(e){
   menu.classList.toggle('show');
 }
 document.addEventListener('click',()=>document.getElementById('sysDropdown')?.classList.remove('show'));
+function logout(){
+  fetch('/home/auth/logout',{method:'POST'}).catch(()=>{}).finally(()=>{location.href='/home/login'});
+}
 
 // ===== MODE =====
 function setMode(mode){

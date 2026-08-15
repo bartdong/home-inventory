@@ -14,9 +14,32 @@ from flask import Flask, request, jsonify, redirect, send_from_directory
 DATABASE_PATH = os.environ.get('DATABASE_PATH', 'data.db')
 ADMIN_KEY = os.environ.get('ADMIN_KEY', '')
 SESSION_SECRET = os.environ.get('SESSION_SECRET', secrets.token_hex(32))
-SESSION_LIFETIME_MINUTES = int(os.environ.get('SESSION_LIFETIME_MINUTES', '30'))  # 滑动窗口，有操作续期
+SESSION_LIFETIME_MINUTES = int(os.environ.get('SESSION_LIFETIME_MINUTES', str(7*24*60)))  # 7 天免登录，活动续期
 MAGIC_LINK_EXPIRE_MINUTES = int(os.environ.get('MAGIC_LINK_EXPIRE_MINUTES', '5'))
 BACKEND_PORT = int(os.environ.get('BACKEND_PORT', '3002'))
+
+ACCESS_CODE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'access_code.txt')
+
+def _load_access_code():
+    """访问码：优先环境变量 ACCESS_CODE，其次 access_code.txt，都没有则生成并持久化"""
+    code = os.environ.get('ACCESS_CODE', '').strip()
+    if code:
+        return code
+    try:
+        with open(ACCESS_CODE_FILE, 'r', encoding='utf-8') as f:
+            code = f.read().strip()
+            if code:
+                return code
+    except FileNotFoundError:
+        pass
+    chars = string.ascii_letters + '23456789'
+    code = ''.join(secrets.choice(chars) for _ in range(8))
+    with open(ACCESS_CODE_FILE, 'w', encoding='utf-8') as f:
+        f.write(code)
+    print(f'[access-code] 已生成新的访问码：{code}（写入 {ACCESS_CODE_FILE}）')
+    return code
+
+ACCESS_CODE = _load_access_code()
 
 app = Flask(__name__)
 app.secret_key = SESSION_SECRET
@@ -55,6 +78,21 @@ def dict_rows(rows):
     return [dict(r) for r in rows]
 
 
+def ensure_schema():
+    """兼容旧库：sessions 表可能缺 last_active 字段"""
+    db = get_db()
+    try:
+        exists = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").fetchone()
+        if not exists:
+            return
+        cols = [r[1] for r in db.execute("PRAGMA table_info(sessions)").fetchall()]
+        if 'last_active' not in cols:
+            db.execute("ALTER TABLE sessions ADD COLUMN last_active TEXT")
+            db.commit()
+    finally:
+        db.close()
+
+
 # ── 认证中间件 ────────────────────────────────────────
 
 def get_current_user():
@@ -81,14 +119,7 @@ def get_current_user():
             db.commit()
             return None
 
-        # 不活跃超时检查（30分钟滑动窗口）
-        last_active = datetime.strptime(row['last_active'], '%Y-%m-%d %H:%M:%S')
-        if (datetime.now() - last_active).total_seconds() > SESSION_LIFETIME_MINUTES * 60:
-            db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
-            db.commit()
-            return None
-
-        # 滑动窗口：更新 last_active 并续期 expires_at
+        # 滑动窗口：有操作就续期（7 天免登录）
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         new_expires = (datetime.now() + timedelta(minutes=SESSION_LIFETIME_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
         db.execute("UPDATE sessions SET last_active = ?, expires_at = ? WHERE session_id = ?", (now, new_expires, session_id))
@@ -119,7 +150,7 @@ def require_login(f):
         if not user:
             if request.path.startswith('/home/api/'):
                 return jsonify({'error': '未登录'}), 401
-            return redirect('/')
+            return redirect('/home/login')
         request.user = user
         return f(*args, **kwargs)
     return decorated
@@ -309,6 +340,42 @@ def magic_login():
         db.commit()
 
         resp = redirect('/home/')
+        resp.set_cookie('session_id', session_id, httponly=True, samesite='Lax',
+                        max_age=SESSION_LIFETIME_MINUTES * 60)
+        return resp
+    finally:
+        db.close()
+
+
+@app.route('/home/login')
+def login_page():
+    """访问码登录页"""
+    return send_from_directory('.', 'login.html')
+
+
+@app.route('/home/auth/login', methods=['POST'])
+def access_code_login():
+    """访问码登录：校验通过即建 7 天 session"""
+    data = request.get_json(silent=True) or {}
+    code = (data.get('code') or '').strip()
+    if not code or code != ACCESS_CODE:
+        return jsonify({'error': '访问码错误'}), 401
+
+    db = get_db()
+    try:
+        # 访问码登录固定映射到一个 owner 用户（不存在则自动创建 admin）
+        user = db.execute("SELECT * FROM users WHERE openid = ?", ('__owner__',)).fetchone()
+        if not user:
+            cur = db.execute("INSERT INTO users (openid, nickname, role) VALUES (?, ?, ?)",
+                             ('__owner__', '管理员', 'admin'))
+            user_id = cur.lastrowid
+        else:
+            user_id = user['id']
+        db.execute("UPDATE users SET last_login_at = datetime('now', 'localtime') WHERE id = ?", (user_id,))
+        db.commit()
+
+        session_id, expires_at = create_session(db, user_id)
+        resp = jsonify({'ok': True})
         resp.set_cookie('session_id', session_id, httponly=True, samesite='Lax',
                         max_age=SESSION_LIFETIME_MINUTES * 60)
         return resp
@@ -852,6 +919,7 @@ def search_items():
 
 # ── 启动 ──────────────────────────────────────────────
 if __name__ == '__main__':
+    ensure_schema()
     print(f"🏠 家庭收纳后端启动 — port {BACKEND_PORT}")
     print(f"   DB: {DATABASE_PATH}")
     app.run(host='0.0.0.0', port=BACKEND_PORT, debug=True)
