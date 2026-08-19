@@ -224,6 +224,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
   <div class="topbar">
     <button class="topbar-btn mobile-back" id="mobileBack" onclick="mobileGoBack()">← 返回</button>
     <div class="search-box"><span class="icon">🔍</span><input type="text" id="searchInput" placeholder="搜索物品..."/><button class="search-btn" id="searchBtn" onclick="doSearch()" style="display:none">搜索</button></div>
+    <button class="topbar-btn" onclick="openAddItem()" style="border-color:var(--accent);color:var(--accent);font-weight:500">➕ 添加物品</button>
     <button class="topbar-btn desktop-only" onclick="openMapEditor()">✏️ 编辑地图</button>
     <div class="dropdown" style="position:relative">
       <button class="topbar-btn" onclick="toggleDropdown(event)" id="sysBtn">⚙️</button>
@@ -823,7 +824,7 @@ function renderDetail(){
   if(!currentCabinet){
     html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddCabinet('${room.id}')">➕ 添加柜子</button></div>`;
   }else if(!currentZone){
-    html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddZone('${currentCabinet}')">➕ 添加位置</button></div>`;
+    html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddItem()">➕ 添加物品</button><button class="toolbar-btn" onclick="openAddZone('${currentCabinet}')">➕ 添加位置</button></div>`;
   }else{
     html+=`<div class="toolbar desktop-only"><button class="toolbar-btn" onclick="openAddItem()">➕ 添加物品</button></div>`;
   }
@@ -930,18 +931,18 @@ let mapSnapshot=null;
 
 // ===== OPERATION LOG =====
 async function createBackup(summary){
-  try{await fetch('/api/backup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({summary})})}catch(e){console.warn('backup failed',e)}
+  try{await fetch('/home/api/backup',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({summary})})}catch(e){console.warn('backup failed',e)}
 }
 async function loadOpLog(){
-  try{const r=await fetch('/api/backups');return await r.json()}catch(e){return[]}
+  try{const r=await fetch('/home/api/backups');return await r.json()}catch(e){return[]}
 }
 async function saveData(){
-  try{await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data,itemProps})})}catch(e){console.warn('save failed',e)}
+  try{await fetch('/home/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({data,itemProps})})}catch(e){console.warn('save failed',e)}
 }
 async function rollbackOpLog(file){
   if(!confirm('回滚到此操作前的状态？'))return;
   try{
-    const r=await fetch('/api/rollback',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({file})});
+    const r=await fetch('/home/api/rollback',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({file})});
     const result=await r.json();
     if(result.data){
       if(result.data.data) data=result.data.data;
@@ -1489,6 +1490,17 @@ function saveItem(){
     if(selZoneId){
       const loc=findZoneById(selZoneId);
       if(loc)tz=loc.zone;
+    }
+    if(!tz){
+      const roomId=document.getElementById('editRoom').value||currentRoom;
+      const cabId=document.getElementById('editCabinet').value||currentCabinet;
+      const room=data.rooms.find(r=>r.id===roomId);
+      const cab=room&&room.cabinets.find(c=>c.id===cabId);
+      if(cab){
+        if(!Array.isArray(cab.zones))cab.zones=[];
+        if(cab.zones.length===0)cab.zones.push({id:'zone_'+uid(),name:'默认',items:[]});
+        tz=cab.zones[0];
+      }
     }
     if(!tz){
       const room=data.rooms.find(r=>r.id===currentRoom);

@@ -391,10 +391,9 @@ def cleanup_expired():
         db.execute("DELETE FROM magic_tokens WHERE expires_at < datetime('now','localtime')")
         # 删除过期 session
         db.execute("DELETE FROM sessions WHERE expires_at < datetime('now','localtime')")
-        # 删除孤立 session（token 已删但 session 还在）
-        db.execute("""DELETE FROM sessions WHERE session_id NOT IN (
-            SELECT DISTINCT session_id FROM magic_tokens WHERE session_id IS NOT NULL
-        )""")
+        # 注意：不再删除"孤立 session"——访问码登录(access_code_login)创建的 session
+        # 不关联 magic_tokens，原逻辑会误删它们导致登录态立即失效（保存操作 401）。
+        # 过期 session 已由上一句 DELETE 覆盖，无需额外清理。
         db.commit()
     finally:
         db.close()
