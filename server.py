@@ -441,8 +441,9 @@ def logout():
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'home-inventory.json')
 
 @app.route('/home/home-inventory.json')
+@require_login
 def serve_json():
-    """原站：静态 JSON 文件"""
+    """原站：静态 JSON 文件（需登录，防止数据公开泄露）"""
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
             return f.read(), 200, {'Content-Type': 'application/json'}
@@ -502,12 +503,18 @@ def rollback():
     import shutil
     data = request.get_json()
     filename = data.get('file', '')
+    # 防路径遍历：只允许备份目录内的纯文件名
+    if not filename or '/' in filename or '\\' in filename or filename.startswith('..'):
+        return jsonify({'error': 'invalid filename'}), 400
     backup_dir = os.path.join(os.path.dirname(DATA_FILE), 'backups')
     src = os.path.join(backup_dir, filename)
     if not os.path.exists(src):
         return jsonify({'error': 'backup not found'}), 404
     shutil.copy2(src, DATA_FILE)
-    return jsonify({'ok': True})
+    # 返回回滚后的完整数据，前端据此刷新
+    with open(DATA_FILE, 'r', encoding='utf-8') as f:
+        new_data = json.load(f)
+    return jsonify({'ok': True, 'data': new_data})
 
 # ── 页面路由 ────────────────────────────────────────
 @app.route('/home/')
