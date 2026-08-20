@@ -14,72 +14,22 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         openid TEXT UNIQUE NOT NULL,
-        unionid TEXT,
         nickname TEXT,
-        avatar_url TEXT,
         role TEXT DEFAULT 'user',
-        is_active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
         last_login_at TEXT
-    )''')
-
-    # 柜子表
-    c.execute('''CREATE TABLE IF NOT EXISTS cabinets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        location TEXT,
-        description TEXT,
-        created_by INTEGER REFERENCES users(id),
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
-        updated_at TEXT
-    )''')
-
-    # 柜子-用户权限表
-    c.execute('''CREATE TABLE IF NOT EXISTS cabinet_permissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cabinet_id INTEGER REFERENCES cabinets(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        permission_level TEXT DEFAULT 'user',
-        granted_by INTEGER REFERENCES users(id),
-        granted_at TEXT DEFAULT (datetime('now', 'localtime')),
-        UNIQUE(cabinet_id, user_id)
-    )''')
-
-    # 物品表
-    c.execute('''CREATE TABLE IF NOT EXISTS items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cabinet_id INTEGER REFERENCES cabinets(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        category TEXT,
-        quantity INTEGER DEFAULT 1,
-        position TEXT,
-        description TEXT,
-        tags TEXT,
-        image_url TEXT,
-        created_by INTEGER REFERENCES users(id),
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
-        updated_at TEXT
-    )''')
-
-    # Magic Link 令牌表
-    c.execute('''CREATE TABLE IF NOT EXISTS magic_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token TEXT UNIQUE NOT NULL,
-        openid TEXT NOT NULL,
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
-        expires_at TEXT NOT NULL,
-        used INTEGER DEFAULT 0,
-        session_id TEXT
     )''')
 
     # 会话表
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
-        data TEXT,
         expires_at TEXT NOT NULL,
-        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        last_active TEXT
     )''')
+    # 兼容旧库：补充 last_active 字段
+    cols = [r[1] for r in c.execute("PRAGMA table_info(sessions)").fetchall()]
+    if 'last_active' not in cols:
+        c.execute("ALTER TABLE sessions ADD COLUMN last_active TEXT")
 
     conn.commit()
     conn.close()

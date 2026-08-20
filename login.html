@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 · 家庭收纳</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;height:100vh;display:flex;align-items:center;justify-content:center}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:40px 32px;width:360px;max-width:90vw;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+  h1{font-size:22px;margin-bottom:8px;text-align:center}
+  .sub{color:#94a3b8;font-size:13px;text-align:center;margin-bottom:28px}
+  input{width:100%;padding:12px 16px;border:2px solid #334155;border-radius:10px;background:#0f172a;color:#e2e8f0;font-size:16px;outline:none;text-align:center;letter-spacing:2px;transition:border-color .2s}
+  input:focus{border-color:#38bdf8}
+  button{width:100%;margin-top:16px;padding:12px;border:none;border-radius:10px;background:#38bdf8;color:#0f172a;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s}
+  button:hover{filter:brightness(1.1)}
+  .err{color:#f87171;font-size:13px;text-align:center;margin-top:12px;min-height:18px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🏠 家庭收纳</h1>
+  <div class="sub">请输入访问码</div>
+  <form id="f">
+    <input type="text" id="code" placeholder="访问码" autocomplete="off" autocapitalize="off" spellcheck="false"/>
+    <button type="submit">进入</button>
+  </form>
+  <div class="err" id="err"></div>
+</div>
+<script>
+  document.getElementById('f').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const code=document.getElementById('code').value.trim();
+    const err=document.getElementById('err');
+    if(!code){err.textContent='请输入访问码';return}
+    err.textContent='';
+    try{
+      const resp=await fetch('/home/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+      if(resp.ok){location.href='/home/';}
+      else{const d=await resp.json().catch(()=>({}));err.textContent=d.error||'访问码错误';}
+    }catch(e){err.textContent='网络错误，请重试'}
+  });
+</script>
+</body>
+</html>
