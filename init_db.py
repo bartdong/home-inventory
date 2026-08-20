@@ -14,12 +14,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         openid TEXT UNIQUE NOT NULL,
-        unionid TEXT,
         nickname TEXT,
-        avatar_url TEXT,
         role TEXT DEFAULT 'user',
-        is_active INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now', 'localtime')),
         last_login_at TEXT
     )''')
 
@@ -27,10 +23,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
-        data TEXT,
         expires_at TEXT NOT NULL,
-        last_active TEXT,
-        created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        last_active TEXT
     )''')
     # 兼容旧库：补充 last_active 字段
     cols = [r[1] for r in c.execute("PRAGMA table_info(sessions)").fetchall()]

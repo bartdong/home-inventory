@@ -57,26 +57,6 @@ def dict_row(row):
     return dict(row) if row else None
 
 
-def dict_rows(rows):
-    """[sqlite3.Row] → [dict]"""
-    return [dict(r) for r in rows]
-
-
-def ensure_schema():
-    """兼容旧库：sessions 表可能缺 last_active 字段"""
-    db = get_db()
-    try:
-        exists = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").fetchone()
-        if not exists:
-            return
-        cols = [r[1] for r in db.execute("PRAGMA table_info(sessions)").fetchall()]
-        if 'last_active' not in cols:
-            db.execute("ALTER TABLE sessions ADD COLUMN last_active TEXT")
-            db.commit()
-    finally:
-        db.close()
-
-
 # ── 认证中间件 ────────────────────────────────────────
 
 def get_current_user():
@@ -340,7 +320,6 @@ def index_page():
 
 # ── 启动 ──────────────────────────────────────────────
 if __name__ == '__main__':
-    ensure_schema()
     print(f"🏠 家庭收纳后端启动 — port {BACKEND_PORT}")
     print(f"   DB: {DATABASE_PATH}")
     app.run(host='0.0.0.0', port=BACKEND_PORT, debug=True)
